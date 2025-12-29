@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import pandas as pd
 
-st.set_page_config(page_title="Kalkulator Meblowy PRO", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="Kalkulator Meblowy PRO 5.0", page_icon="🪚", layout="wide")
 
 # ==========================================
 # 1. FUNKCJA RYSUJĄCA (Z KOLORAMI)
