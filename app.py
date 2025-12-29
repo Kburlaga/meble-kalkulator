@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import pandas as pd
 
-st.set_page_config(page_title="Kalkulator Meblowy PRO ID", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="Kalkulator Meblowy PRO ID 2025", page_icon="🪚", layout="wide")
 
 # ==========================================
 # 1. FUNKCJA RYSUJĄCA
