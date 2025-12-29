@@ -4,7 +4,7 @@ import matplotlib.patches as patches
 import pandas as pd
 import io
 
-st.set_page_config(page_title="Kalkulator Meblowy V8 (Szablony)", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="Kalkulator Meblowy V 8 (Szablony)", page_icon="🪚", layout="wide")
 
 # ==========================================
 # 1. FUNKCJA RYSUJĄCA (PODGLĄD CAŁOŚCI)
