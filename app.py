@@ -3,14 +3,15 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import pandas as pd
 
-st.set_page_config(page_title="Kalkulator Meblowy PRO ID 2025", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="Kalkulator Meblowy PRO", page_icon="🪚", layout="wide")
 
 # ==========================================
-# 1. FUNKCJA RYSUJĄCA
+# 1. FUNKCJA RYSUJĄCA (Z KOLORAMI)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3'):
     """
-    Rysuje formatkę z unikalnym ID i wymiarami.
+    Rysuje formatkę.
+    otwory: lista krotek (x, y) LUB (x, y, kolor)
     """
     fig, ax = plt.subplots(figsize=(6, 4))
     
@@ -19,11 +20,23 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3')
     ax.add_patch(rect)
     
     # Otwory
-    for x, y in otwory:
-        circle = patches.Circle((x, y), radius=4, edgecolor='red', facecolor='white', linewidth=1.5)
+    for otw in otwory:
+        x = otw[0]
+        y = otw[1]
+        # Domyślny kolor czerwony, chyba że podano trzeci parametr
+        kolor = otw[2] if len(otw) > 2 else 'red'
+        
+        circle = patches.Circle((x, y), radius=4, edgecolor=kolor, facecolor='white', linewidth=1.5)
         ax.add_patch(circle)
-        label = f"({x:.1f}, {y:.1f})"
-        ax.text(x + 6, y + 2, label, fontsize=8, color='darkred', weight='bold')
+        
+        # Etykieta (tylko jeśli mało otworów, żeby nie zamazać)
+        if len(otwory) < 20:
+            label = f"({x:.1f}, {y:.1f})"
+            ax.text(x + 6, y + 2, label, fontsize=7, color=kolor, weight='bold')
+
+    # Legenda kolorów (tylko jeśli są różne)
+    if otwory:
+        ax.text(0, -wys*0.15, "🔴 Czerwone: Prowadnice/Front  🔵 Niebieskie: Konfirmaty (Konstrukcja)", fontsize=9)
 
     # Ustawienia widoku
     margines = max(szer, wys) * 0.15
@@ -31,7 +44,6 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3')
     ax.set_ylim(-margines, wys + margines)
     ax.set_aspect('equal')
     
-    # Tytuł z ID
     ax.set_title(f"ID: {id_elementu}\n{nazwa}\n{szer:.1f} x {wys:.1f} mm", fontsize=12, weight='bold', pad=15)
     ax.set_xlabel("Szerokość (mm)")
     ax.set_ylabel("Wysokość (mm)")
@@ -65,7 +77,7 @@ BAZA_SYSTEMOW = {
     }
 }
 
-st.title("🪚 Manager Formatek z ID")
+st.title("🪚 Manager Formatek (Z Wierceniami)")
 
 # ==========================================
 # 3. PANEL BOCZNY (INPUT)
@@ -96,7 +108,6 @@ with st.sidebar:
     opcje = list(BAZA_SYSTEMOW.keys()) + ["Custom"]
     wybrany_sys = st.selectbox("Wybierz system:", opcje)
     
-    # Ładowanie parametrów
     if wybrany_sys == "Custom":
         params = {"offset_prowadnica": 37.5, "offset_front_y": 47.5, "offset_front_x": 15.5,
                   "redukcja_dna_szer": 75, "redukcja_dna_dl": 24, "redukcja_tyl_szer": 87,
@@ -112,17 +123,12 @@ with st.sidebar:
     axis_nl = st.selectbox("Długość (NL)", [300, 350, 400, 450, 500, 550], index=4)
 
 # ==========================================
-# 4. LOGIKA GENEROWANIA LISTY FORMATEK
+# 4. LOGIKA GENEROWANIA LISTY
 # ==========================================
 lista_elementow = []
 
 def dodaj_element(nazwa_czesci, szer, wys, gr, material, uwagi="", wiercenia=[]):
-    """Pomocnicza funkcja do tworzenia obiektów"""
-    # Generowanie unikalnego ID
-    # Licznik sprawdzający ile już jest takich elementów, żeby dodać numer (np. FR-1, FR-2)
     count = sum(1 for x in lista_elementow if x['typ'] == nazwa_czesci) + 1
-    
-    # Skróty do ID
     skroty = {
         "Bok Lewy": "BOK-L", "Bok Prawy": "BOK-P", "Wieniec Górny": "WIEN-G", 
         "Wieniec Dolny": "WIEN-D", "Przegroda": "PRZEG", "Plecy HDF": "HDF",
@@ -130,7 +136,6 @@ def dodaj_element(nazwa_czesci, szer, wys, gr, material, uwagi="", wiercenia=[])
     }
     kod_czesci = skroty.get(nazwa_czesci, "EL")
     
-    # Dla boków L/P i wieńców nie numerujemy jeśli jest 1 sztuka danego typu
     if nazwa_czesci in ["Bok Lewy", "Bok Prawy", "Wieniec Górny", "Wieniec Dolny"]:
         identyfikator = f"{KOD_PROJEKTU}-{kod_czesci}"
     else:
@@ -144,13 +149,12 @@ def dodaj_element(nazwa_czesci, szer, wys, gr, material, uwagi="", wiercenia=[])
         "Grubość [mm]": gr,
         "Materiał": material,
         "Uwagi": uwagi,
-        "typ": nazwa_czesci, # do filtrowania
-        "wiercenia": wiercenia # lista krotek (x,y)
+        "typ": nazwa_czesci,
+        "wiercenia": wiercenia
     })
 
 # --- A. KORPUS ---
-# 1. Boki
-# Obliczanie wierceń w bokach (pod prowadnice)
+# 1. Boki (Tylko prowadnice - czerwone)
 wiercenia_prowadnice = []
 akt_h = 0
 h_frontu = (wys_wewnetrzna - ((axis_ilosc + 1) * axis_fuga)) / axis_ilosc
@@ -160,23 +164,46 @@ for i in range(axis_ilosc):
     wiercenia_prowadnice.append(pos)
     akt_h += axis_fuga + h_frontu
 
-# Przygotowanie współrzędnych otworów dla rysunku boku (X=37mm od przodu)
 otwory_bok_rys = []
 for y in wiercenia_prowadnice:
-    otwory_bok_rys.append((37.0, y))
-    otwory_bok_rys.append((37.0 + 224, y)) # Drugi otwór stabilizacyjny
+    # (x, y, kolor) -> 'red' domyślnie
+    otwory_bok_rys.append((37.0, y, 'red')) 
+    otwory_bok_rys.append((37.0 + 224, y, 'red'))
 
 dodaj_element("Bok Lewy", D_MEBLA, H_MEBLA - 2*GR_PLYTY, GR_PLYTY, "Płyta 18mm", "Okleina: przód/dół/góra", otwory_bok_rys)
 dodaj_element("Bok Prawy", D_MEBLA, H_MEBLA - 2*GR_PLYTY, GR_PLYTY, "Płyta 18mm", "Okleina: przód/dół/góra", otwory_bok_rys)
 
-# 2. Wieńce
-dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "Płyta 18mm", "Okleina dookoła")
-dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "Płyta 18mm", "Okleina dookoła")
+# 2. Wieńce (Konfirmaty - NIEBIESKIE)
+# Musimy obliczyć gdzie wiercić w wieńcu, żeby trafić w boki i przegrody
+otwory_wieniec = []
+y_konf_przod = 50 # 5cm od krawędzi przedniej
+y_konf_tyl = D_MEBLA - 50 # 5cm od krawędzi tylnej
 
-# 3. Przegrody
+# A. Łączenie z Bokiem Lewym (środek płyty bocznej to 9mm od krawędzi wieńca)
+center_bok_lewy = GR_PLYTY / 2
+otwory_wieniec.append((center_bok_lewy, y_konf_przod, 'blue'))
+otwory_wieniec.append((center_bok_lewy, y_konf_tyl, 'blue'))
+
+# B. Łączenie z Bokiem Prawym
+center_bok_prawy = W_MEBLA - (GR_PLYTY / 2)
+otwory_wieniec.append((center_bok_prawy, y_konf_przod, 'blue'))
+otwory_wieniec.append((center_bok_prawy, y_konf_tyl, 'blue'))
+
+# C. Łączenie z Przegrodami
+current_x = GR_PLYTY # Startujemy za bokiem lewym
 for i in range(ilosc_przegrod):
-    # Przegroda ma wiercenia z obu stron (teoretycznie), tutaj upraszczamy do jednej listy
-    dodaj_element("Przegroda", D_MEBLA, H_MEBLA - 2*GR_PLYTY, GR_PLYTY, "Płyta 18mm", "Wiercenia z obu stron!", otwory_bok_rys)
+    current_x += szer_jednej_wneki
+    center_przegroda = current_x + (GR_PLYTY / 2)
+    otwory_wieniec.append((center_przegroda, y_konf_przod, 'blue'))
+    otwory_wieniec.append((center_przegroda, y_konf_tyl, 'blue'))
+    current_x += GR_PLYTY
+
+dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "Płyta 18mm", "Okleina dookoła", otwory_wieniec)
+dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "Płyta 18mm", "Okleina dookoła", otwory_wieniec)
+
+# 3. Przegrody (Prowadnice z OBU stron)
+# Uwaga: Na rysunku 2D pokażemy wiercenia jak dla boku, stolarz musi wiedzieć że to "przelotowe" lub dwustronne
+dodaj_element("Przegroda", D_MEBLA, H_MEBLA - 2*GR_PLYTY, GR_PLYTY, "Płyta 18mm", "Wiercenia OBUSTRONNE!", otwory_bok_rys)
 
 # 4. Plecy
 hdf_h = H_MEBLA - 4 if typ_plecow == "Nakładane" else H_MEBLA - 20
@@ -185,12 +212,9 @@ if typ_plecow != "Brak":
     dodaj_element("Plecy HDF", hdf_w, hdf_h, 3, "HDF 3mm", typ_plecow)
 
 # --- B. SZUFLADY ---
-# Generujemy formatki dla WSZYSTKICH sekcji (na razie założenie: szuflady są tylko w pierwszej sekcji lub w każdej)
-# Przyjmijmy dla uproszczenia widoku, że szuflady są w 1 sekcji (żeby nie robić 50 formatek)
-# Lub zróbmy pętlę po sekcjach jeśli chcesz:
 st.sidebar.markdown("---")
-czy_wszystkie_sekcje = st.sidebar.checkbox("Wypełnij szufladami WSZYSTKIE wnęki", value=True)
-sekcje_do_wypelnienia = ilosc_sekcji if czy_wszystkie_sekcje else 1
+czy_wszystkie = st.sidebar.checkbox("Szuflady we wszystkich wnękach", value=True)
+sekcje_do_wypelnienia = ilosc_sekcji if czy_wszystkie else 1
 
 w_frontu = szer_jednej_wneki - (2 * axis_fuga)
 dno_szer = szer_jednej_wneki - params["redukcja_dna_szer"]
@@ -198,37 +222,41 @@ dno_dl = axis_nl - params["redukcja_dna_dl"]
 tyl_szer = szer_jednej_wneki - params["redukcja_tyl_szer"]
 tyl_wys = params["wysokosci_tylu"][typ_boku_key]
 
-# Obliczanie wierceń frontu
 wierc_front_y = params["offset_front_y"]
 wierc_front_x = params["offset_front_x"] - axis_fuga
 otwory_front_rys = [
-    (wierc_front_x, wierc_front_y), 
-    (wierc_front_x, wierc_front_y+32),
-    (w_frontu - wierc_front_x, wierc_front_y),
-    (w_frontu - wierc_front_x, wierc_front_y+32)
+    (wierc_front_x, wierc_front_y, 'red'), 
+    (wierc_front_x, wierc_front_y+32, 'red'),
+    (w_frontu - wierc_front_x, wierc_front_y, 'red'),
+    (w_frontu - wierc_front_x, wierc_front_y+32, 'red')
 ]
 
 for s in range(sekcje_do_wypelnienia):
     for sz in range(axis_ilosc):
-        # Front
         dodaj_element("Front Szuflady", w_frontu, h_frontu, 18, "Płyta 18mm", f"Sekcja {s+1}, Szuflada {sz+1}", otwory_front_rys)
-        # Wnętrze
         dodaj_element("Dno Szuflady", dno_dl, dno_szer, 16, "Płyta 16mm", "Biała/Szara")
         dodaj_element("Tył Szuflady", tyl_szer, tyl_wys, 16, "Płyta 16mm", "Biała/Szara")
 
 # ==========================================
-# 5. WYŚWIETLANIE (TABELA I RYSUNKI)
+# 5. WYŚWIETLANIE
 # ==========================================
-# Tworzenie DataFrame
 df = pd.DataFrame(lista_elementow)
-# Ukrywamy kolumny techniczne w tabeli
 df_view = df.drop(columns=['typ', 'wiercenia'])
 
 tab_lista, tab_rysunki = st.tabs(["📋 LISTA ROZKROJU", "📐 RYSUNKI TECHNICZNE"])
 
 with tab_lista:
     st.subheader(f"Lista Formatek: {KOD_PROJEKTU}")
-    st.caption("Możesz powiększyć tabelę ikoną w rogu.")
+    
+    # Przycisk pobierania CSV
+    csv = df_view.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Pobierz Listę (CSV)",
+        data=csv,
+        file_name=f'{KOD_PROJEKTU}_rozpiska.csv',
+        mime='text/csv',
+    )
+    
     st.dataframe(
         df_view,
         column_config={
@@ -239,34 +267,24 @@ with tab_lista:
         hide_index=True
     )
     
-    # Podsumowanie materiałowe
     st.divider()
     m18 = df[df["Materiał"] == "Płyta 18mm"]
     m16 = df[df["Materiał"] == "Płyta 16mm"]
-    mhdf = df[df["Materiał"] == "HDF 3mm"]
-    
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Płyta 18mm (Front/Korpus)", f"{len(m18)} szt.")
-    c2.metric("Płyta 16mm (Szuflady)", f"{len(m16)} szt.")
-    c3.metric("HDF 3mm (Plecy)", f"{len(mhdf)} szt.")
+    c1, c2 = st.columns(2)
+    c1.metric("Płyta 18mm", f"{len(m18)} szt.")
+    c2.metric("Płyta 16mm", f"{len(m16)} szt.")
 
 with tab_rysunki:
     st.subheader("Generator Rysunków")
-    
-    # Lista rozwijana z ID elementów, które mają wiercenia lub są istotne
-    # Filtrujemy tylko te, które mają sensowne wiercenia lub są duże
     elementy_z_rys = [row['ID'] for row in lista_elementow if row['wiercenia']]
     
     if not elementy_z_rys:
-        st.info("Brak elementów zdefiniowanych jako wymagające wiercenia (Fronty/Boki).")
+        st.info("Brak elementów z wierceniami.")
     else:
-        wybrane_id = st.selectbox("Wybierz element do podglądu:", elementy_z_rys)
-        
-        # Pobieramy dane wybranego elementu
+        wybrane_id = st.selectbox("Wybierz element:", elementy_z_rys)
         item = next(x for x in lista_elementow if x['ID'] == wybrane_id)
         
         c_rys1, c_rys2 = st.columns([2, 1])
-        
         with c_rys1:
             fig = rysuj_element(
                 item['Szerokość [mm]'], 
@@ -277,16 +295,12 @@ with tab_rysunki:
                 '#e6ccb3' if item['Materiał'] == "Płyta 18mm" else '#f0f2f6'
             )
             st.pyplot(fig)
-            
         with c_rys2:
-            st.info("**Szczegóły elementu**")
-            st.write(f"**Nazwa:** {item['Nazwa']}")
-            st.write(f"**Wymiar:** {item['Szerokość [mm]']} x {item['Wysokość [mm]']}")
-            st.write(f"**Materiał:** {item['Materiał']}")
-            if item['Uwagi']:
-                st.warning(f"⚠️ {item['Uwagi']}")
-            
+            st.info("Legenda Wierceń")
+            # Filtrujemy kolory do wyświetlenia opisu
+            coords = item['wiercenia']
+            st.write(f"Ilość otworów: {len(coords)}")
             st.markdown("---")
-            st.write("**Lista współrzędnych wierceń (X, Y):**")
-            for w in item['wiercenia']:
-                st.code(f"X: {w[0]:.1f} | Y: {w[1]:.1f}")
+            for w in coords:
+                typ = "Konfirmat" if len(w) > 2 and w[2] == 'blue' else "Prowadnica/Front"
+                st.code(f"X: {w[0]:.1f} | Y: {w[1]:.1f} [{typ}]")
