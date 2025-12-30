@@ -5,12 +5,11 @@ from matplotlib.backends.backend_pdf import PdfPages
 import pandas as pd
 import io
 
-st.set_page_config(page_title="STOLARZPRO - V10 (Reset)", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V10.1", page_icon="🪚", layout="wide")
 
 # ==========================================
 # 0. ZARZĄDZANIE STANEM (RESETOWANIE)
 # ==========================================
-# Funkcja przywracająca ustawienia domyślne
 def resetuj_projekt():
     st.session_state['kod_pro'] = "RTV-SALON"
     st.session_state['h_mebla'] = 600
@@ -20,16 +19,16 @@ def resetuj_projekt():
     st.session_state['il_przegrod'] = 2
     st.session_state['typ_plecow'] = "Nakładane"
     st.session_state['sys_szuflad'] = "GTV Axis Pro"
-    st.session_state['typ_boku'] = "C" # Domyślny dla Axis Pro
+    st.session_state['typ_boku'] = "C"
     st.session_state['fuga'] = 3.0
     st.session_state['il_szuflad'] = 2
     st.session_state['nl'] = 500
     st.session_state['arkusz_w'] = 2800
     st.session_state['arkusz_h'] = 2070
     st.session_state['rzaz'] = 4
-    st.session_state['pdf_ready'] = None # Czyścimy bufor PDF
+    st.session_state['pdf_ready'] = None
 
-# Inicjalizacja zmiennych sesji (jeśli ich nie ma)
+# Inicjalizacja domyślnych wartości
 defaults = {
     'kod_pro': "RTV-SALON", 'h_mebla': 600, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
     'il_przegrod': 2, 'typ_plecow': "Nakładane", 'sys_szuflad': "GTV Axis Pro", 'typ_boku': "C",
@@ -110,10 +109,7 @@ BAZA_SYSTEMOW = {
 # ==========================================
 with st.sidebar:
     st.title("🪚 STOLARZPRO")
-    
-    # PRZYCISK RESETU
     st.button("🗑️ RESET / NOWY PROJEKT", on_click=resetuj_projekt, type="primary", use_container_width=True)
-    st.caption("Uwaga: To przywróci ustawienia domyślne!")
     st.markdown("---")
     
     st.header("1. Projekt")
@@ -138,25 +134,19 @@ with st.sidebar:
         typ_boku_key = "Custom"
     else:
         params = BAZA_SYSTEMOW[wybrany_sys]
-        # Logika dynamicznego wyboru boku
         boki_list = list(params["wysokosci_tylu"].keys())
-        # Sprawdzamy czy obecny wybór jest poprawny dla nowego systemu
-        index_boku = 0
-        if st.session_state['typ_boku'] in boki_list:
-            index_boku = boki_list.index(st.session_state['typ_boku'])
-        else:
-            index_boku = len(boki_list) - 1
-            
-        typ_boku_key = st.selectbox("Wysokość boku", boki_list, index=index_boku, key='typ_boku')
+        idx_boku = 0
+        if st.session_state['typ_boku'] in boki_list: idx_boku = boki_list.index(st.session_state['typ_boku'])
+        else: idx_boku = len(boki_list) - 1
+        typ_boku_key = st.selectbox("Wysokość boku", boki_list, index=idx_boku, key='typ_boku')
 
     axis_fuga = st.number_input("Fuga frontów (mm)", key='fuga')
     axis_ilosc = st.slider("Szuflady w sekcji", 1, 5, key='il_szuflad')
     
-    # Logika dla listy wyboru NL
-    nl_options = [300, 350, 400, 450, 500, 550]
-    idx_nl = 4 # Default 500
-    if st.session_state['nl'] in nl_options: idx_nl = nl_options.index(st.session_state['nl'])
-    axis_nl = st.selectbox("Długość (NL)", nl_options, index=idx_nl, key='nl')
+    nl_opts = [300, 350, 400, 450, 500, 550]
+    idx_nl = 4
+    if st.session_state['nl'] in nl_opts: idx_nl = nl_opts.index(st.session_state['nl'])
+    axis_nl = st.selectbox("Długość (NL)", nl_opts, index=idx_nl, key='nl')
     
     st.markdown("---")
     st.header("5. Parametry Rozkroju")
@@ -164,7 +154,7 @@ with st.sidebar:
     ARKUSZ_H = st.number_input("Wys. arkusza", key='arkusz_h')
     RZAZ = st.number_input("Rzaz piły", key='rzaz')
 
-# --- LOGIKA APLIKACJI ---
+# --- LOGIKA ---
 ilosc_sekcji = ilosc_przegrod + 1
 szer_wew_total = W_MEBLA - (2 * GR_PLYTY) - (ilosc_przegrod * GR_PLYTY)
 szer_jednej_wneki = szer_wew_total / ilosc_sekcji
@@ -180,7 +170,7 @@ def dodaj_element(nazwa, szer, wys, gr, material, uwagi="", wiercenia=[]):
     ident = f"{KOD_PROJEKTU}-{kod}" if nazwa in ["Bok Lewy", "Bok Prawy", "Wieniec Górny", "Wieniec Dolny"] else f"{KOD_PROJEKTU}-{kod}-{count}"
     lista_elementow.append({"ID": ident, "Nazwa": nazwa, "typ": nazwa, "Szerokość [mm]": round(szer, 1), "Wysokość [mm]": round(wys, 1), "Grubość [mm]": gr, "Materiał": material, "Uwagi": uwagi, "wiercenia": wiercenia})
 
-# --- GENEROWANIE ELEMENTÓW (Korpus + Szuflady) ---
+# --- GENEROWANIE ELEMENTÓW ---
 wiercenia_prow = []
 akt_h = 0
 h_frontu = (wys_wewnetrzna - ((axis_ilosc + 1) * axis_fuga)) / axis_ilosc
@@ -208,7 +198,11 @@ for i in range(ilosc_przegrod):
 
 dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "Płyta 18mm", "Okleina dookoła", otwory_wien)
 dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "Płyta 18mm", "Okleina dookoła", otwory_wien)
-dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "Płyta 18mm", "2-str", otwory_bok)
+
+# POPRAWKA: Przegrody teraz w pętli
+for i in range(ilosc_przegrod):
+    dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "Płyta 18mm", "2-str", otwory_bok)
+
 hdf_h = H_MEBLA - 4 if typ_plecow == "Nakładane" else H_MEBLA - 20
 hdf_w = W_MEBLA - 4 if typ_plecow == "Nakładane" else W_MEBLA - 20
 if typ_plecow != "Brak": dodaj_element("Plecy HDF", hdf_w, hdf_h, 3, "HDF 3mm", typ_plecow)
