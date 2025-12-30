@@ -82,6 +82,14 @@ korpus.buduj_korpus()
 korpus.buduj_wnetrze(konfiguracja)
 
 # ==========================================
+# OBLICZENIE SZEROKOŚCI JEDNEJ WNĘKI (zabezpieczenie dzielenia przez zero)
+# ==========================================
+if ilosc_sekcji > 0:
+    szer_jednej_wneki = (W_MEBLA - 2*GR_PLYTY - ilosc_przegrod*GR_PLYTY)/ilosc_sekcji
+else:
+    szer_jednej_wneki = 0
+
+# ==========================================
 # TABS
 # ==========================================
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA 2D"])
@@ -106,12 +114,12 @@ with tabs[0]:
         if st.button("📄 Eksport PDF"):
             tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
             export_pdf(korpus, tmp_pdf.name)
-            st.success(f"PDF wygenerowany: {tmp_pdf.name}")
+            st.download_button("📄 Pobierz PDF", data=open(tmp_pdf.name, "rb").read(), file_name=f"{KOD_PROJEKTU}.pdf")
     with col2:
         if st.button("💻 Eksport CNC (CSV)"):
             tmp_csv = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
             export_cnc(korpus, tmp_csv.name)
-            st.success(f"CSV wygenerowany: {tmp_csv.name}")
+            st.download_button("💻 Pobierz CSV", data=open(tmp_csv.name, "rb").read(), file_name=f"{KOD_PROJEKTU}.csv")
 
 # ---- RYSUNKI ----
 with tabs[1]:
@@ -124,5 +132,5 @@ with tabs[2]:
 # ---- PODGLĄD 2D ----
 with tabs[3]:
     st.subheader("Podgląd frontowy szafki")
-    fig = rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, konfiguracja, (W_MEBLA - 2*GR_PLYTY - ilosc_przegrod*GR_PLYTY)/ilosc_sekcji)
+    fig = rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, konfiguracja, szer_jednej_wneki)
     st.pyplot(fig)
