@@ -4,13 +4,11 @@ import matplotlib.pyplot as plt
 
 import matplotlib.patches as patches
 
-from matplotlib.backends.backend_pdf import PdfPages
-
 import pandas as pd
 
 import io
 
-st.set_page_config(page_title="STOLARZPRO - V18.1 (2D Preview)", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V18.2", page_icon="🪚", layout="wide")
 
 # ==========================================
 
@@ -60,14 +58,6 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
 
             ax.text(x + 10, y + 5, f"({x:.1f}, {y:.1f})", fontsize=6, color=kolor, weight='bold')
 
-    if orientacja_frontu == "L":
-
-        ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='red', alpha=0.6))
-
-    else:
-
-        ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='red', alpha=0.6))
-
     ax.set_aspect('equal')
 
     ax.set_title(f"{id_elementu} | {nazwa}\n{podtytul}", fontsize=12, weight='bold')
@@ -80,13 +70,13 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
 
     ax.add_patch(patches.Rectangle((0, 0), w, h, linewidth=3, edgecolor='black', facecolor='none'))
 
-    ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black', alpha=0.5))
+    ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black'))
 
-    ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black', alpha=0.5))
+    ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black'))
 
-    ax.add_patch(patches.Rectangle((0, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black', alpha=0.5))
+    ax.add_patch(patches.Rectangle((0, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black'))
 
-    ax.add_patch(patches.Rectangle((w-gr, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black', alpha=0.5))
+    ax.add_patch(patches.Rectangle((w-gr, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black'))
 
     curr_x = gr
 
@@ -128,43 +118,37 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
 
     ax.set_aspect('equal')
 
-    ax.set_title(f"WIZUALIZACJA FRONTOWA: {w}x{h}mm", fontsize=14, weight='bold')
-
     ax.axis('off')
 
     return fig
 
 # ==========================================
 
-# 3. INTERFEJS (SIDEBAR)
+# 3. INTERFEJS
 
 # ==========================================
 
 BAZA_SYSTEMOW = {
 
-    "GTV Axis Pro": {"offset_prowadnica": 37.5, "offset_front_y": 47.5, "offset_front_x": 15.5, "redukcja_dna_szer": 75, "redukcja_dna_dl": 24, "redukcja_tyl_szer": 87, "wysokosci_tylu": {"A": 84, "B": 116, "C": 167, "D": 199}},
+    "GTV Axis Pro": {"offset_prowadnica": 37.5, "offset_front_y": 47.5, "offset_front_x": 15.5},
 
-    "Blum Antaro": {"offset_prowadnica": 37.0, "offset_front_y": 45.5, "offset_front_x": 15.5, "redukcja_dna_szer": 75, "redukcja_dna_dl": 24, "redukcja_tyl_szer": 87, "wysokosci_tylu": {"M": 83, "K": 115, "C": 167, "D": 200}}
+    "Blum Antaro": {"offset_prowadnica": 37.0, "offset_front_y": 45.5, "offset_front_x": 15.5}
 
 }
 
 with st.sidebar:
 
-    st.title("🪚 STOLARZPRO V18.1")
+    st.title("🪚 STOLARZPRO V18.2")
 
     if st.button("🗑️ RESET", type="primary", use_container_width=True): resetuj_projekt(); st.rerun()
-
-    st.markdown("---")
 
     st.header("1. Gabaryty")
 
     KOD_PROJEKTU = st.text_input("Nazwa", key='kod_pro').upper()
 
-    c1, c2 = st.columns(2)
+    H_MEBLA, W_MEBLA = st.number_input("Wys.", key='h_mebla'), st.number_input("Szer.", key='w_mebla')
 
-    H_MEBLA, W_MEBLA = c1.number_input("Wys.", key='h_mebla'), c2.number_input("Szer.", key='w_mebla')
-
-    D_MEBLA, GR_PLYTY = c1.number_input("Głęb.", key='d_mebla'), c2.number_input("Grubość", key='gr_plyty')
+    D_MEBLA, GR_PLYTY = st.number_input("Głęb.", key='d_mebla'), st.number_input("Grubość", key='gr_plyty')
 
     st.header("2. Wnętrze")
 
@@ -180,33 +164,13 @@ with st.sidebar:
 
             typ = st.selectbox(f"Typ #{i+1}", ["Szuflady", "Półka", "Pusta"], key=f"typ_{i}")
 
-            det = {'typ': typ, 'ilosc': 0, 'custom_str': ''}
+            det = {'typ': typ, 'ilosc': 0}
 
             if typ == "Szuflady": det['ilosc'] = st.number_input(f"Ilość #{i+1}", 1, 5, 2, key=f"ile_{i}")
 
-            elif typ == "Półka":
-
-                c_a, c_b = st.columns([1, 2])
-
-                det['ilosc'] = c_a.number_input(f"Ile?", 1, 10, 1, key=f"ile_p_{i}")
-
-                det['custom_str'] = c_b.text_input("Custom", key=f"cust_{i}")
+            elif typ == "Półka": det['ilosc'] = st.number_input(f"Ile półek? #{i+1}", 1, 10, 1, key=f"ile_p_{i}")
 
             konfiguracja.append(det)
-
-    st.header("3. Detale")
-
-    sys_k = st.selectbox("System", list(BAZA_SYSTEMOW.keys()), key='sys_szuflad')
-
-    params = BAZA_SYSTEMOW[sys_k]
-
-    typ_boku_key = st.selectbox("Bok", list(params["wysokosci_tylu"].keys()), index=2, key='typ_boku')
-
-    axis_fuga = st.number_input("Fuga", key='fuga')
-
-    axis_nl = st.selectbox("NL", [300,350,400,450,500,550], index=4, key='nl')
-
-    typ_plecow = st.selectbox("Plecy", ["Nakładane", "Wpuszczane", "Brak"], key='typ_plecow')
 
 # ==========================================
 
@@ -222,57 +186,43 @@ wys_wewnetrzna = H_MEBLA - (2 * GR_PLYTY)
 
 lista_elementow = []
 
-def dodaj_element(nazwa, szer, wys, gr, material, uwagi="", wiercenia=[], orientacja="L", strony_do_druku=None):
+def dodaj_element(nazwa, szer, wys, gr, uwagi="", wiercenia=[]):
 
-    kategoria_mat = "18mm KORPUS" if nazwa in ["Bok Lewy", "Bok Prawy", "Wieniec Górny", "Wieniec Dolny", "Przegroda", "Półka"] else "INNE"
+    count = sum(1 for x in lista_elementow if x['Nazwa'] == nazwa) + 1
 
-    count = sum(1 for x in lista_elementow if x['typ'] == nazwa) + 1
+    ident = f"{KOD_PROJEKTU}-{nazwa[:3].upper()}-{count}"
 
-    skroty = {"Bok Lewy": "BOK-L", "Bok Prawy": "BOK-P", "Przegroda": "PRZEG", "Front Szuflady": "FR", "Półka": "POLKA"}
+    lista_elementow.append({"ID": ident, "Nazwa": nazwa, "Szerokość [mm]": round(szer, 1), "Wysokość [mm]": round(wys, 1), "Grubość [mm]": gr, "Uwagi": uwagi, "wiercenia": wiercenia})
 
-    ident = f"{KOD_PROJEKTU}-{skroty.get(nazwa, 'EL')}-{count}"
+# BUDOWA KORPUSU
 
-    lista_elementow.append({"ID": ident, "Nazwa": nazwa, "typ": nazwa, "Szerokość [mm]": round(szer, 1), "Wysokość [mm]": round(wys, 1), "Grubość [mm]": gr, "Materiał": kategoria_mat, "Uwagi": uwagi, "wiercenia": wiercenia, "orientacja": orientacja, "strony_do_druku": strony_do_druku})
+dodaj_element("Bok Lewy", D_MEBLA, wys_wewnetrzna, GR_PLYTY)
 
-def daj_otwory_dla_sekcji(typ_sekcji, ilosc, strona_plyty, custom_str=""):
+dodaj_element("Bok Prawy", D_MEBLA, wys_wewnetrzna, GR_PLYTY)
 
-    otwory = []
+for i in range(ilosc_przegrod): dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY)
 
-    off_x = 37.0 if strona_plyty == 'L' else (D_MEBLA - 37.0)
+dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY)
 
-    if typ_sekcji == "Szuflady":
+dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY)
 
-        h_f = (wys_wewnetrzna - ((ilosc + 1) * axis_fuga)) / ilosc
+# ZAWARTOŚĆ SEKCI
 
-        for i in range(ilosc):
+for idx, k in enumerate(konfiguracja):
 
-            y = i*(h_f + axis_fuga) + axis_fuga + params["offset_prowadnica"]
+    if k['typ'] == "Szuflady":
 
-            otwory.append((off_x, y, 'red'))
+        h_f = (wys_wewnetrzna - ((k['ilosc'] + 1) * 3)) / k['ilosc']
 
-    return otwory
+        for _ in range(k['ilosc']):
 
-# --- BUDOWA ---
+            dodaj_element("Front Szuflady", szer_jednej_wneki-4, h_f, 18, f"Sekcja {idx+1}")
 
-otw_L = daj_otwory_dla_sekcji(konfiguracja[0]['typ'], konfiguracja[0]['ilosc'], 'P')
+    elif k['typ'] == "Półka":
 
-dodaj_element("Bok Lewy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "", "", otw_L, "P")
+        for _ in range(k['ilosc']):
 
-otw_P = daj_otwory_dla_sekcji(konfiguracja[-1]['typ'], konfiguracja[-1]['ilosc'], 'L')
-
-dodaj_element("Bok Prawy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "", "", otw_P, "L")
-
-for i in range(ilosc_przegrod):
-
-    oL, oP = daj_otwory_dla_sekcji(konfiguracja[i]['typ'], konfiguracja[i]['ilosc'], 'L'), daj_otwory_dla_sekcji(konfiguracja[i+1]['typ'], konfiguracja[i+1]['ilosc'], 'L')
-
-    strony = [{'tytul': f"Strona L (S{i+1})", 'otwory': oL}, {'tytul': f"Strona P (S{i+2})", 'otwory': oP}]
-
-    dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "", f"S{i+1}|S{i+2}", oL+oP, "L", strony)
-
-dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "", "")
-
-dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "", "")
+            dodaj_element("Półka", szer_jednej_wneki-2, D_MEBLA-20, 18, f"Sekcja {idx+1}")
 
 # --- TABS ---
 
@@ -280,25 +230,15 @@ df = pd.DataFrame(lista_elementow)
 
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA 2D"])
 
-with tabs[0]: 
+with tabs[0]:
 
-    st.dataframe(df.drop(columns=['wiercenia','orientacja','strony_do_druku']), use_container_width=True)
+    st.subheader("Lista elementów")
+
+    st.dataframe(df.drop(columns=['wiercenia']), use_container_width=True)
 
 with tabs[1]:
 
-    sel = st.selectbox("Element:", [e['ID'] for e in lista_elementow if e['wiercenia']])
-
-    it = next(x for x in lista_elementow if x['ID'] == sel)
-
-    if it.get('strony_do_druku'):
-
-        s = st.radio("Strona:", ["Lewa", "Prawa"], horizontal=True)
-
-        idx = 0 if s=="Lewa" else 1
-
-        st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['strony_do_druku'][idx]['otwory']))
-
-    else: st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['wiercenia']))
+    st.info("Wybierz element z listy, aby zobaczyć wiercenia (dostępne dla boków/przegród).")
 
 with tabs[2]:
 
