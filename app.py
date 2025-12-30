@@ -68,8 +68,8 @@ class Wiercenie:
     y: float
     srednica: float = 5
     glebokos: float = 12
-    typ: str = "polka"  # polka, przegroda, zawias
-    strona: str = "lewa"  # lewa, prawa (dla lustrzanych odbić)
+    typ: str = "polka"
+    strona: str = "lewa"
 
 @dataclass
 class Element:
@@ -80,10 +80,6 @@ class Element:
     gr: float
     uwagi: str = ""
     wiercenia: List[Wiercenie] = field(default_factory=list)
-    krawedz_lewa: str = "ABS"
-    krawedz_prawa: str = "ABS"
-    krawedz_gorna: str = "ABS"
-    krawedz_dolna: str = "ABS"
     
     def __post_init__(self):
         self.szer = round(float(self.szer), 1)
@@ -112,12 +108,11 @@ class Korpus:
         return elem
     
     def dodaj_wiercenia_bok(self, element: Element, strona: str = "lewy"):
-        """Dodaje wiercenia do boku pod półki (co 32mm standardowo)"""
-        # Wiercenia pod półki - dwie kolumny
+        """Dodaje wiercenia do boku pod półki (co 32mm)"""
         odstep_od_krawedzi = 50
-        odstep_pionowy = 32  # standard 32mm
+        odstep_pionowy = 32
         
-        x_pozycje = [37, self.gleb - 37]  # dwie linie wiercen
+        x_pozycje = [37, self.gleb - 37]
         
         for x in x_pozycje:
             y = odstep_od_krawedzi
@@ -127,14 +122,15 @@ class Korpus:
                 )
                 y += odstep_pionowy
     
-    def dodaj_wiercenia_przegroda(self, element: Element, pozycja_w_szafce: int):
-        """Dodaje wiercenia do przegrody (lustrzane dla prawej strony)"""
+    def dodaj_wiercenia_przegroda(self, element: Element, pozycja: int):
+        """Dodaje wiercenia do przegrody (obustronne z lustrzanym odbiciem)"""
         odstep_od_krawedzi = 50
         odstep_pionowy = 32
         
+        x_pozycje = [37, self.gleb - 37]
+        
         # Lewa strona przegrody
-        x_lewe = [37, self.gleb - 37]
-        for x in x_lewe:
+        for x in x_pozycje:
             y = odstep_od_krawedzi
             while y < (element.wys - odstep_od_krawedzi):
                 element.wiercenia.append(
@@ -142,9 +138,8 @@ class Korpus:
                 )
                 y += odstep_pionowy
         
-        # Prawa strona przegrody (lustrzane odbicie)
-        # W rzeczywistości to ta sama współrzędna X, ale oznaczamy jako "prawa" dla rozróżnienia
-        for x in x_lewe:
+        # Prawa strona przegrody (lustrzane)
+        for x in x_pozycje:
             y = odstep_od_krawedzi
             while y < (element.wys - odstep_od_krawedzi):
                 element.wiercenia.append(
@@ -257,8 +252,7 @@ class Rozkroj:
                 elem_wys + self.rzaz <= arkusz['pozostale_y'])
     
     def rozkroj_elementy(self, elementy: List[Element]):
-        """Prosty algorytm rozkroju - First Fit Decreasing"""
-        # Sortuj elementy od największych
+        """Prosty algorytm rozkroju"""
         elementy_sorted = sorted(elementy, 
                                 key=lambda e: e.szer * e.wys, 
                                 reverse=True)
@@ -268,9 +262,7 @@ class Rozkroj:
         for elem in elementy_sorted:
             zmieszczony = False
             
-            # Spróbuj dopasować do istniejących arkuszy
             for arkusz in self.arkusze:
-                # Spróbuj oba kierunki
                 if self.czy_zmiesci_sie(arkusz, elem.szer, elem.wys):
                     arkusz['elementy'].append({
                         'elem': elem,
@@ -292,7 +284,6 @@ class Rozkroj:
                     zmieszczony = True
                     break
             
-            # Jeśli nie zmieścił się, dodaj nowy arkusz
             if not zmieszczony:
                 self.dodaj_arkusz()
                 arkusz = self.arkusze[-1]
@@ -433,18 +424,16 @@ def rysuj_element_z_wierceniami(element: Element):
                                 facecolor='wheat', alpha=0.3)
     ax.add_patch(formatka)
     
-    # Wiercenia - różne kolory dla różnych typów
+    # Wiercenia
     kolory = {'polka': 'blue', 'przegroda': 'red', 'zawias': 'green'}
     
     for w in element.wiercenia:
         kolor = kolory.get(w.typ, 'blue')
-        # Wiercenia z lewej strony - pełne kółka
         if w.strona == "lewa":
             circle = Circle((w.x, w.y), w.srednica/2, 
                           color=kolor, alpha=0.6)
             ax.add_patch(circle)
             ax.plot(w.x, w.y, 'x', color='black', markersize=4)
-        # Wiercenia z prawej strony (lustrzane) - puste kółka
         else:
             circle = Circle((w.x, w.y), w.srednica/2, 
                           fill=False, edgecolor=kolor, linewidth=2, alpha=0.8)
@@ -596,7 +585,7 @@ def rysuj_rozkroj(rozkroj: Rozkroj):
                 w, h = elem.szer, elem.wys
                 tekst_rot = ""
             
-            kolor = kolory[i % len(kolorów)]
+            kolor = kolory[i % len(kolory)]
             
             rect = patches.Rectangle((x, y), w, h,
                                     linewidth=1, edgecolor='black',
@@ -639,4 +628,309 @@ def init_session_state():
         'piła_szer': 4
     }
     for key, val in defaults.items():
-        if key not in
+        if key not in st.session_state:
+            st.session_state[key] = val
+
+def resetuj():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    init_session_state()
+
+# ==========================================
+# APLIKACJA GŁÓWNA
+# ==========================================
+def main():
+    init_session_state()
+    
+    # SIDEBAR
+    with st.sidebar:
+        st.title("🪚 STOLARZPRO V18.2")
+        st.caption("System projektowania mebli")
+        
+        if st.button("🗑️ RESET", type="primary", use_container_width=True):
+            resetuj()
+            st.rerun()
+        
+        st.divider()
+        
+        # GABARYTY
+        st.header("1. 📏 Gabaryty")
+        kod = st.text_input("Nazwa projektu", key='kod_pro').upper()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            szer = st.number_input("Szer [mm]", 200, 3000, key='w_mebla', step=10)
+            wys = st.number_input("Wys [mm]", 200, 2500, key='h_mebla', step=10)
+        with col2:
+            gleb = st.number_input("Głęb [mm]", 200, 800, key='d_mebla', step=10)
+            gr = st.selectbox("Grub [mm]", [16, 18, 25], index=1, key='gr_plyty')
+        
+        st.divider()
+        
+        # SYSTEM SZUFLAD
+        st.header("2. 🔧 System szuflad")
+        system = st.selectbox("Wybierz system", 
+                             list(SYSTEMY_SZUFLAD.keys()),
+                             key='system_szuflad')
+        
+        with st.expander("📋 Parametry systemu", expanded=False):
+            params = SYSTEMY_SZUFLAD[system]
+            st.write(f"**Min. odstęp bok-bok:** {params['min_bok_do_bok']} mm")
+            st.write(f"**Luz szerokości:** {params['luz_szer']} mm")
+            st.write(f"**Wys. boczka:** {params['wys_boczka']} mm")
+            st.write(f"**Głęb. montażu:** {params['gleb_montaz']} mm")
+            st.write(f"**Luz od tyłu:** {params['luz_tyl']} mm")
+        
+        st.divider()
+        
+        # PODZIAŁ
+        st.header("3. 🗂️ Podział")
+        przegrody = st.number_input("Liczba przegród", 0, 10, key='il_przegrod')
+        sekcje = przegrody + 1
+        st.info(f"Liczba sekcji: **{sekcje}**")
+        
+        # KONFIGURACJA SEKCJI
+        konfiguracja = []
+        for i in range(sekcje):
+            with st.expander(f"⚙️ Sekcja {i+1}", expanded=True):
+                typ = st.selectbox("Typ zabudowy", 
+                                  ["Pusta", "Półki", "Szuflady"], 
+                                  key=f"typ_{i}", index=0)
+                
+                det = {'typ': typ, 'ilosc': 0}
+                
+                if typ == "Szuflady":
+                    det['ilosc'] = st.number_input("Liczba szuflad", 1, 5, 2, key=f"sz_{i}")
+                elif typ == "Półki":
+                    det['ilosc'] = st.number_input("Liczba półek", 1, 10, 2, key=f"po_{i}")
+                
+                konfiguracja.append(det)
+        
+        st.divider()
+        
+        # ROZKRÓJ
+        st.header("4. 📐 Rozkrój")
+        st.write("Wymiary arkusza płyty:")
+        ark_szer = st.number_input("Szer. arkusza [mm]", 1000, 3000, key='arkusz_szer', step=10)
+        ark_wys = st.number_input("Wys. arkusza [mm]", 1000, 3000, key='arkusz_wys', step=10)
+        pila_szer = st.number_input("Szerokość rzazu [mm]", 3, 6, key='piła_szer')
+    
+    # MAIN CONTENT
+    st.title("🪚 STOLARZPRO V18.2")
+    st.caption("Profesjonalny system projektowania mebli")
+    
+    # Walidacja
+    if not waliduj_wymiary(szer, wys, gleb, gr, przegrody):
+        st.stop()
+    
+    # Budowa korpusu
+    korpus = Korpus(kod, szer, wys, gleb, gr, przegrody)
+    korpus.buduj_korpus()
+    korpus.buduj_wnetrze(konfiguracja, st.session_state.system_szuflad)
+    
+    szer_sekcji = (szer - 2*gr - przegrody*gr) / sekcje if sekcje > 0 else 0
+    
+    # Rozkrój
+    rozkroj = Rozkroj(st.session_state.arkusz_szer, 
+                      st.session_state.arkusz_wys, 
+                      st.session_state.piła_szer)
+    elementy_do_rozkroju = [e for e in korpus.elementy if e.gr == gr]
+    rozkroj.rozkroj_elementy(elementy_do_rozkroju)
+    
+    # TABS
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📋 Lista", 
+        "📐 Podsumowanie", 
+        "🔍 Wiercenia 2D",
+        "🗺️ Rozkrój", 
+        "👁️ Wizualizacja", 
+        "💾 Eksport"
+    ])
+    
+    # TAB 1: LISTA
+    with tab1:
+        st.subheader("📋 Kompletna lista elementów")
+        
+        df = pd.DataFrame([{
+            "LP": e.id,
+            "Nazwa": e.nazwa,
+            "Szer [mm]": e.szer,
+            "Wys [mm]": e.wys,
+            "Grub [mm]": e.gr,
+            "Wiercenia": len(e.wiercenia),
+            "Uwagi": e.uwagi
+        } for e in korpus.elementy])
+        
+        st.dataframe(df, use_container_width=True, height=400)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Liczba elementów", len(korpus.elementy))
+        with col2:
+            pow = sum(e.szer * e.wys / 1_000_000 for e in korpus.elementy if e.gr == gr)
+            st.metric("Powierzchnia płyty", f"{pow:.2f} m²")
+        with col3:
+            st.metric("Liczba arkuszy", len(rozkroj.arkusze))
+    
+    # TAB 2: PODSUMOWANIE
+    with tab2:
+        st.subheader("📐 Szczegóły projektu")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📏 Wymiary korpusu")
+            st.write(f"**Kod projektu:** {kod}")
+            st.write(f"**Szerokość:** {szer} mm")
+            st.write(f"**Wysokość:** {wys} mm")
+            st.write(f"**Głębokość:** {gleb} mm")
+            st.write(f"**Grubość płyty:** {gr} mm")
+            st.write(f"**Liczba przegród:** {przegrody}")
+            st.write(f"**Szerokość sekcji:** {szer_sekcji:.1f} mm")
+        
+        with col2:
+            st.markdown("### 🔧 System i konfiguracja")
+            st.write(f"**System szuflad:** {st.session_state.system_szuflad}")
+            
+            params = SYSTEMY_SZUFLAD[st.session_state.system_szuflad]
+            st.write(f"**Parametry systemu:**")
+            st.write(f"- Luz szerokości: {params['luz_szer']} mm")
+            st.write(f"- Głębokość montażu: {params['gleb_montaz']} mm")
+            
+            st.markdown("### 📦 Sekcje")
+            for i, sek in enumerate(konfiguracja):
+                if sek['typ'] != "Pusta":
+                    st.write(f"**Sekcja {i+1}:** {sek['typ']} ({sek['ilosc']} szt.)")
+    
+    # TAB 3: WIERCENIA 2D
+    with tab3:
+        st.subheader("🔍 Widok 2D elementów z wierceniami")
+        st.info("💡 **Legenda:** Pełne kółka = wiercenia po lewej stronie | Puste kółka = wiercenia po prawej stronie (lustrzane odbicie)")
+        
+        elementy_z_wierceniami = [e for e in korpus.elementy if e.wiercenia]
+        
+        if elementy_z_wierceniami:
+            nazwy = [f"#{e.id} - {e.nazwa} ({len(e.wiercenia)} wierceń)" 
+                    for e in elementy_z_wierceniami]
+            
+            wybrany_idx = st.selectbox("Wybierz element do podglądu", 
+                                      range(len(nazwy)), 
+                                      format_func=lambda x: nazwy[x])
+            
+            wybrany_element = elementy_z_wierceniami[wybrany_idx]
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                fig = rysuj_element_z_wierceniami(wybrany_element)
+                if fig:
+                    st.pyplot(fig)
+                    plt.close(fig)
+            
+            with col2:
+                st.markdown("### 📊 Szczegóły wiercenia")
+                st.write(f"**Element:** {wybrany_element.nazwa}")
+                st.write(f"**Wymiary:** {wybrany_element.szer} x {wybrany_element.wys} mm")
+                st.write(f"**Liczba wierceń:** {len(wybrany_element.wiercenia)}")
+                
+                if wybrany_element.wiercenia:
+                    st.markdown("#### Lista wierceń:")
+                    df_wiercenia = pd.DataFrame([{
+                        "X [mm]": w.x,
+                        "Y [mm]": w.y,
+                        "Ø [mm]": w.srednica,
+                        "Głęb [mm]": w.glebokos,
+                        "Strona": w.strona
+                    } for w in wybrany_element.wiercenia[:20]])
+                    st.dataframe(df_wiercenia, height=300)
+                    
+                    if len(wybrany_element.wiercenia) > 20:
+                        st.caption(f"...i {len(wybrany_element.wiercenia)-20} więcej")
+        else:
+            st.warning("Brak elementów z wierceniami w tym projekcie")
+    
+    # TAB 4: ROZKRÓJ
+    with tab4:
+        st.subheader("🗺️ Rozkrój na arkusze")
+        
+        st.info(f"📐 Arkusz: {st.session_state.arkusz_szer} x {st.session_state.arkusz_wys} mm | Rzaz: {st.session_state.piła_szer} mm")
+        
+        if rozkroj.niezmieszczone:
+            st.error(f"⚠️ Uwaga! {len(rozkroj.niezmieszczone)} elementów nie zmieściło się na arkuszach!")
+            for elem in rozkroj.niezmieszczone:
+                st.write(f"- {elem.nazwa}: {elem.szer} x {elem.wys} mm")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Liczba arkuszy", len(rozkroj.arkusze))
+        with col2:
+            pow = sum(e.szer * e.wys / 1_000_000 for e in korpus.elementy if e.gr == gr)
+            wykorzystanie = (pow / (len(rozkroj.arkusze) * st.session_state.arkusz_szer * st.session_state.arkusz_wys / 1_000_000)) * 100 if len(rozkroj.arkusze) > 0 else 0
+            st.metric("Wykorzystanie", f"{wykorzystanie:.1f}%")
+        with col3:
+            st.metric("Elementów do rozkroju", len(elementy_do_rozkroju))
+        
+        # Rysunki rozkroju
+        figs = rysuj_rozkroj(rozkroj)
+        for idx, fig in enumerate(figs):
+            st.pyplot(fig)
+            plt.close(fig)
+            
+            # Szczegóły arkusza
+            with st.expander(f"📋 Szczegóły arkusza #{idx+1}"):
+                arkusz = rozkroj.arkusze[idx]
+                df_ark = pd.DataFrame([{
+                    "LP": item['elem'].id,
+                    "Nazwa": item['elem'].nazwa,
+                    "Szer": item['elem'].wys if item['rotacja'] else item['elem'].szer,
+                    "Wys": item['elem'].szer if item['rotacja'] else item['elem'].wys,
+                    "Rotacja": "TAK" if item['rotacja'] else "NIE",
+                    "X": item['x'],
+                    "Y": item['y']
+                } for item in arkusz['elementy']])
+                st.dataframe(df_ark, use_container_width=True)
+    
+    # TAB 5: WIZUALIZACJA
+    with tab5:
+        st.subheader("👁️ Wizualizacja 3D - Widok frontowy")
+        fig = rysuj_widok_frontowy(szer, wys, gr, konfiguracja, szer_sekcji)
+        if fig:
+            st.pyplot(fig)
+            plt.close(fig)
+    
+    # TAB 6: EKSPORT
+    with tab6:
+        st.subheader("💾 Eksport danych projektu")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📄 Eksport PDF")
+            st.write("Lista wszystkich elementów wraz z liczbą wierceń")
+            if st.button("Generuj PDF", use_container_width=True, disabled=not REPORTLAB_OK):
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+                if eksport_pdf(korpus, tmp.name):
+                    with open(tmp.name, "rb") as f:
+                        st.download_button("📥 Pobierz PDF", f.read(),
+                                         f"{kod}_lista.pdf", "application/pdf",
+                                         use_container_width=True)
+                    st.success("✅ PDF wygenerowany!")
+        
+        with col2:
+            st.markdown("### 💻 Eksport CNC (CSV)")
+            st.write("Plik CSV gotowy do importu w oprogramowaniu CNC")
+            if st.button("Generuj CSV", use_container_width=True):
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+                if eksport_csv(korpus, tmp.name):
+                    with open(tmp.name, "rb") as f:
+                        st.download_button("📥 Pobierz CSV", f.read(),
+                                         f"{kod}_cnc.csv", "text/csv",
+                                         use_container_width=True)
+                    st.success("✅ CSV wygenerowany!")
+    
+    # Footer
+    st.divider()
+    st.caption("STOLARZPRO V18.2 © 2024 | Wszystkie funkcje aktywne")
+
+if __name__ == "__main__":
+    main()
