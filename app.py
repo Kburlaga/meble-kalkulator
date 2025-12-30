@@ -103,15 +103,71 @@ def optymalizuj_rozkroj(formatki, arkusz_w, arkusz_h, rzaz=4):
     if aktualny_arkusz['elementy']: arkusze.append(aktualny_arkusz)
     return arkusze
 
-elif typ == "Półka":
+# ==========================================
+# 3. INTERFEJS (SIDEBAR)
+# ==========================================
+BAZA_SYSTEMOW = {
+    "GTV Axis Pro": {"offset_prowadnica": 37.5, "offset_front_y": 47.5, "offset_front_x": 15.5, "redukcja_dna_szer": 75, "redukcja_dna_dl": 24, "redukcja_tyl_szer": 87, "wysokosci_tylu": {"A": 84, "B": 116, "C": 167, "D": 199}},
+    "Blum Antaro": {"offset_prowadnica": 37.0, "offset_front_y": 45.5, "offset_front_x": 15.5, "redukcja_dna_szer": 75, "redukcja_dna_dl": 24, "redukcja_tyl_szer": 87, "wysokosci_tylu": {"M": 83, "K": 115, "C": 167, "D": 200}}
+}
+
+with st.sidebar:
+    st.title("🪚 STOLARZPRO V17")
+    if st.button("🗑️ RESET PROJEKTU", type="primary", use_container_width=True):
+        resetuj_projekt()
+        st.rerun()
+
+    st.markdown("---")
+    st.header("1. Gabaryty Mebla")
+    KOD_PROJEKTU = st.text_input("Nazwa Projektu", key='kod_pro').upper()
+    c1, c2 = st.columns(2)
+    H_MEBLA = c1.number_input("Wysokość", key='h_mebla')
+    W_MEBLA = c2.number_input("Szerokość", key='w_mebla')
+    D_MEBLA = c1.number_input("Głębokość", key='d_mebla')
+    GR_PLYTY = c2.number_input("Gr. Płyty", key='gr_plyty')
+    
+    st.header("2. Wnętrze")
+    ilosc_przegrod = st.number_input("Ilość przegród pionowych", min_value=0, key='il_przegrod')
+    ilosc_sekcji = ilosc_przegrod + 1
+    
+    st.markdown("---")
+    st.subheader(f"🎛️ Konfiguracja Modułów ({ilosc_sekcji})")
+    
+    konfiguracja = []
+    # Pętla generująca ustawienia dla każdej sekcji
+    for i in range(ilosc_sekcji):
+        with st.expander(f"Sekcja {i+1} (od lewej)", expanded=True):
+            typ = st.selectbox(f"Typ zawartości #{i+1}", ["Szuflady", "Półka", "Pusta"], key=f"typ_{i}")
+            
+            detale = {'typ': typ, 'ilosc': 0, 'custom_str': ''}
+            
+            if typ == "Szuflady":
+                detale['ilosc'] = st.number_input(f"Ilość szuflad #{i+1}", 1, 5, 2, key=f"ile_{i}")
+            elif typ == "Półka":
                 c_a, c_b = st.columns([1, 2])
                 detale['ilosc'] = c_a.number_input(f"Ile półek?", 1, 10, 1, key=f"ile_p_{i}")
                 detale['custom_str'] = c_b.text_input("Odstępy (opcja)", placeholder="np. 200, 250", key=f"cust_{i}")
                 
-                # --- DODATEK: OSTRZEŻENIE DLA UŻYTKOWNIKA ---
                 if detale['custom_str']:
                     st.caption("⚠️ Tryb Ręczny: Licznik ilości jest ignorowany przy wierceniach!")
-                # ---------------------------------------------
+                
+            konfiguracja.append(detale)
+
+    st.markdown("---")
+    st.header("3. Detale Techniczne")
+    sys_k = st.selectbox("System szuflad", list(BAZA_SYSTEMOW.keys()), key='sys_szuflad')
+    params = BAZA_SYSTEMOW[sys_k]
+    typ_boku_key = st.selectbox("Wys. boku szuflady", list(params["wysokosci_tylu"].keys()), index=2, key='typ_boku')
+    
+    axis_fuga = st.number_input("Fuga frontów", key='fuga')
+    axis_nl = st.selectbox("Długość prowadnicy (NL)", [300,350,400,450,500,550], index=4, key='nl')
+    typ_plecow = st.selectbox("Plecy", ["Nakładane", "Wpuszczane", "Brak"], key='typ_plecow')
+    
+    st.header("4. Rozkrój")
+    ARKUSZ_W = st.number_input("Szer. arkusza", key='arkusz_w')
+    ARKUSZ_H = st.number_input("Wys. arkusza", key='arkusz_h')
+    RZAZ = st.number_input("Rzaz piły", key='rzaz')
+
 # ==========================================
 # 4. LOGIKA GŁÓWNA I OBLICZENIA
 # ==========================================
