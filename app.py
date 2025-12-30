@@ -65,7 +65,8 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
     tytul_pelny = f"ID: {id_elementu} | {nazwa}\n{podtytul}" if podtytul else f"ID: {id_elementu} | {nazwa}"
     ax.set_title(f"{tytul_pelny}\nWymiar: {szer:.1f} x {wys:.1f} mm", fontsize=12, weight='bold', pad=10)
     ax.grid(True, linestyle='--', alpha=0.5)
-    return fig# ==========================================
+    return fig# 
+    ==========================================
 # 2. NESTING
 # ==========================================
 def optymalizuj_rozkroj(formatki, arkusz_w, arkusz_h, rzaz=4):
@@ -144,7 +145,9 @@ with st.sidebar:
     st.header("4. Rozkrój")
     ARKUSZ_W = st.number_input("Szer. arkusza", key='arkusz_w')
     ARKUSZ_H = st.number_input("Wys. arkusza", key='arkusz_h')
-    RZAZ = st.number_input("Rzaz", key='rzaz')# ==========================================
+    RZAZ = st.number_input("Rzaz", key='rzaz')
+
+# ==========================================
 # 4. LOGIKA GŁÓWNA
 # ==========================================
 szer_wew_total = W_MEBLA - (2 * GR_PLYTY) - (ilosc_przegrod * GR_PLYTY)
@@ -154,6 +157,7 @@ lista_elementow = []
 
 def dodaj_element(nazwa, szer, wys, gr, material, uwagi="", wiercenia=[], orientacja="L", strony_do_druku=None):
     kategoria_mat, kolor_tla = "INNE", '#e6ccb3'
+    # Półka ruchoma idzie do materiału KORPUS
     if nazwa in ["Bok Lewy", "Bok Prawy", "Wieniec Górny", "Wieniec Dolny", "Przegroda", "Półka"]:
         kategoria_mat = "18mm KORPUS"; kolor_tla = '#e6ccb3'
     elif nazwa == "Front Szuflady":
@@ -176,12 +180,15 @@ def dodaj_element(nazwa, szer, wys, gr, material, uwagi="", wiercenia=[], orient
         "strony_do_druku": strony_do_druku
     })
 
-def daj_otwory_dla_sekcji(typ_sekcji, ilosc, strona_plyty):
+def daj_otwory_dla_sekcji(typ_sekcji, ilosc, strona_plyty, custom_str=""):
     otwory = []
-    # Logika 'L' (Lewa) = Front przy X=0 (37mm)
-    # Logika 'P' (Prawa) = Front przy X=Szer (Szer-37mm)
+    # Parametry wierceń bocznych (System 32mm)
     offset_x = 37.0 if strona_plyty == 'L' else (D_MEBLA - 37.0)
     offset_x_2 = 261.0 if strona_plyty == 'L' else (D_MEBLA - 261.0)
+    
+    # OFFSET DLA PODPÓRKI (Kluczowa poprawka)
+    # Wiercimy 2mm PONIŻEJ dolnej płaszczyzny półki, żeby uwzględnić grubość kołnierza podpórki
+    offset_podporka = 2.0 
     
     if typ_sekcji == "Szuflady":
         h_frontu = (wys_wewnetrzna - ((ilosc + 1) * axis_fuga)) / ilosc
@@ -191,141 +198,39 @@ def daj_otwory_dla_sekcji(typ_sekcji, ilosc, strona_plyty):
             otwory.append((offset_x, y, 'red'))
             otwory.append((offset_x_2, y, 'red'))
             akt_h += axis_fuga + h_frontu
+            
     elif typ_sekcji == "Półka":
-        y = wys_wewnetrzna / 2
-        otwory.append((offset_x, y, 'green'))
-        x_tyl = (D_MEBLA - 37.0) if strona_plyty == 'L' else 37.0
-        otwory.append((x_tyl, y, 'green'))
-    return otwory# --- BUDOWANIE KONSTRUKCJI ---
+        y_holes = [] # Tu zbieramy współrzędne otworów (nie środków płyt!)
+        
+        # 1. Tryb Custom (użytkownik wpisał np. "200, 300")
+        if custom_str and len(custom_str.strip()) > 0:
+            try:
+                wymiary = [float(x.strip()) for x in custom_str.split(',') if x.strip()]
+                current_y = 0
+                for w in wymiary:
+                    y_dol_polki = current_y + w
+                    # Wiercimy POD półką
+                    y_holes.append(y_dol_polki - offset_podporka)
+                    current_y = y_dol_polki + GR_PLYTY
+            except:
+                st.error("Błąd formatu wymiarów custom (użyj kropki dla ułamków)!")
 
-# 1. Bok Lewy (Front z Prawej -> 'P')
-otwory_bok_L = daj_otwory_dla_sekcji(konfiguracja[0]['typ'], konfiguracja[0]['ilosc'], 'P')
-dodaj_element("Bok Lewy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "", "", otwory_bok_L, "P")
-
-# 2. Bok Prawy (Front z Lewej -> 'L')
-otwory_bok_P = daj_otwory_dla_sekcji(konfiguracja[-1]['typ'], konfiguracja[-1]['ilosc'], 'L')
-dodaj_element("Bok Prawy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "", "", otwory_bok_P, "L")
-
-# 3. Przegrody (Dwustronne, Front zawsze L)
-for i in range(ilosc_przegrod):
-    # Lewa strona przegrody obsługuje sekcję i
-    otwory_L = daj_otwory_dla_sekcji(konfiguracja[i]['typ'], konfiguracja[i]['ilosc'], 'L')
-    # Prawa strona przegrody obsługuje sekcję i+1
-    otwory_P = daj_otwory_dla_sekcji(konfiguracja[i+1]['typ'], konfiguracja[i+1]['ilosc'], 'L')
-    
-    wszystkie = otwory_L + otwory_P
-    strony = [
-        {'tytul': f"STRONA LEWA (Dla Sekcji {i+1})", 'otwory': otwory_L},
-        {'tytul': f"STRONA PRAWA (Dla Sekcji {i+2})", 'otwory': otwory_P}
-    ]
-    dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "", f"Sekcja {i+1}/{i+2}", wszystkie, "L", strony_do_druku=strony)
-
-# 4. Wieńce
-otwory_wien = []
-y_k1, y_k2 = 50, D_MEBLA - 50
-otwory_wien.extend([(GR_PLYTY/2, y_k1, 'blue'), (GR_PLYTY/2, y_k2, 'blue')])
-otwory_wien.extend([(W_MEBLA-GR_PLYTY/2, y_k1, 'blue'), (W_MEBLA-GR_PLYTY/2, y_k2, 'blue')])
-cx = GR_PLYTY
-for i in range(ilosc_przegrod):
-    cx += szer_jednej_wneki
-    otwory_wien.extend([(cx+GR_PLYTY/2, y_k1, 'blue'), (cx+GR_PLYTY/2, y_k2, 'blue')])
-    cx += GR_PLYTY
-dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "", "", otwory_wien)
-dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "", "", otwory_wien)
-
-# 5. Plecy
-hdf_h = H_MEBLA - 4 if typ_plecow == "Nakładane" else H_MEBLA - 20
-hdf_w = W_MEBLA - 4 if typ_plecow == "Nakładane" else W_MEBLA - 20
-if typ_plecow != "Brak": dodaj_element("Plecy HDF", hdf_w, hdf_h, 3, "")
-
-# 6. Zawartość Modułów
-for idx, konfig in enumerate(konfiguracja):
-    typ = konfig['typ']
-    ilosc = konfig['ilosc']
-    nr = idx + 1
-    
-    if typ == "Szuflady":
-        h_frontu = (wys_wewnetrzna - ((ilosc + 1) * axis_fuga)) / ilosc
-        w_fr = szer_jednej_wneki - (2 * axis_fuga)
-        dno_w, dno_l = szer_jednej_wneki - params["redukcja_dna_szer"], axis_nl - params["redukcja_dna_dl"]
-        tyl_w, tyl_h = szer_jednej_wneki - params["redukcja_tyl_szer"], params["wysokosci_tylu"][typ_boku_key]
-        wx, wy = params["offset_front_x"] - axis_fuga, params["offset_front_y"]
-        otw_front = [(wx, wy, 'red'), (wx, wy+32, 'red'), (w_fr-wx, wy, 'red'), (w_fr-wx, wy+32, 'red')]
-        for sz in range(ilosc):
-            dodaj_element("Front Szuflady", w_fr, h_frontu, 18, "", f"S{nr}", otw_front)
-            dodaj_element("Dno Szuflady", dno_l, dno_w, 16, "", "")
-            dodaj_element("Tył Szuflady", tyl_w, tyl_h, 16, "", "")
-    elif typ == "Półka":
-        dodaj_element("Półka", szer_jednej_wneki-2, D_MEBLA-20, 18, "", f"S{nr}", [])# ==========================================
-# 5. PREZENTACJA
-# ==========================================
-st.info(f"✅ Aktywna Konfiguracja: { [m['typ'] for m in konfiguracja] }") # DEBUG INFO
-
-df = pd.DataFrame(lista_elementow)
-t1, t2, t3 = st.tabs(["📋 LISTA", "📐 DOKUMENTACJA", "🗺️ ROZKRÓJ"])
-
-with t1:
-    st.subheader(f"Projekt: {KOD_PROJEKTU}")
-    for mat in sorted(df['Materiał'].unique()):
-        st.caption(f"{mat}")
-        st.dataframe(df[df['Materiał'] == mat].drop(columns=['typ','wiercenia','kolor_tla','orientacja','strony_do_druku']), hide_index=True, use_container_width=True)
-    st.download_button("📥 CSV", df.drop(columns=['typ','wiercenia','kolor_tla','orientacja','strony_do_druku']).to_csv(index=False).encode('utf-8'), f'{KOD_PROJEKTU}.csv', 'text/csv')
-
-with t2:
-    st.subheader("🖨️ Rysunki Techniczne")
-    col1, col2 = st.columns([1,2])
-    with col1:
-        if st.button("🚀 GENERUJ PDF", type="primary"):
-            with st.spinner("Rysuję..."):
-                pdf_buffer = io.BytesIO()
-                with PdfPages(pdf_buffer) as pdf:
-                    els = [e for e in lista_elementow if e['wiercenia'] or e['Nazwa'] == 'Front Szuflady']
-                    for e in els:
-                        if e.get('strony_do_druku'):
-                            for strona in e['strony_do_druku']:
-                                fig = rysuj_element(e['Szerokość [mm]'], e['Wysokość [mm]'], e['ID'], e['Nazwa'], strona['otwory'], e['kolor_tla'], e['orientacja'], podtytul=strona['tytul'])
-                                pdf.savefig(fig); plt.close(fig)
-                        else:
-                            fig = rysuj_element(e['Szerokość [mm]'], e['Wysokość [mm]'], e['ID'], e['Nazwa'], e['wiercenia'], e['kolor_tla'], e['orientacja'])
-                            pdf.savefig(fig); plt.close(fig)
-                    pdf_buffer.seek(0)
-                    st.session_state['pdf_ready'] = pdf_buffer
-    with col2:
-        if st.session_state.get('pdf_ready'):
-            st.success("Gotowe!")
-            st.download_button("📥 POBIERZ PDF", st.session_state['pdf_ready'], f"{KOD_PROJEKTU}_Rysunki.pdf", "application/pdf")
-    
-    st.divider()
-    st.subheader("👁️ Podgląd Elementu")
-    ids = [r['ID'] for r in lista_elementow if r['wiercenia'] or r['Nazwa']=='Front Szuflady']
-    if ids:
-        sel = st.selectbox("Wybierz:", ids)
-        it = next(x for x in lista_elementow if x['ID'] == sel)
-        if it.get('strony_do_druku'):
-            strona_view = st.radio("Widok strony (Przegroda Dwustronna):", ["Lewa", "Prawa"], horizontal=True)
-            idx_s = 0 if strona_view == "Lewa" else 1
-            data_s = it['strony_do_druku'][idx_s]
-            st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], data_s['otwory'], it['kolor_tla'], it['orientacja'], podtytul=data_s['tytul']))
-        else:
-            st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['wiercenia'], it['kolor_tla'], it['orientacja']))
-
-with t3:
-    st.subheader("Optymalizacja Rozkroju")
-    if st.button("Uruchom Rozkrój"):
-        materialy = sorted(df['Materiał'].unique())
-        for mat in materialy:
-            st.markdown(f"### 🪚 {mat}")
-            czesci = [x for x in lista_elementow if x['Materiał'] == mat]
-            if not czesci: continue
-            wynik = optymalizuj_rozkroj(czesci, ARKUSZ_W, ARKUSZ_H, RZAZ)
-            st.success(f"Arkusze: {len(wynik)}")
-            for i, ark in enumerate(wynik):
-                fig, ax = plt.subplots(figsize=(10, 6))
-                ax.add_patch(patches.Rectangle((0,0), ARKUSZ_W, ARKUSZ_H, facecolor='#f0f0f0', edgecolor='black'))
-                for e in ark['elementy']:
-                    orig = next(x for x in lista_elementow if x['ID'] == e['id'])
-                    ax.add_patch(patches.Rectangle((e['x'], e['y']), e['w'], e['h'], facecolor=orig['kolor_tla'], edgecolor='black', alpha=0.8))
-                    if e['w']>100 and e['h']>50:
-                        ax.text(e['x']+e['w']/2, e['y']+e['h']/2, e['id'], ha='center', va='center', fontsize=6)
-                ax.set_xlim(-100, ARKUSZ_W+100); ax.set_ylim(-100, ARKUSZ_H+100); ax.set_aspect('equal')
-                st.pyplot(fig)
+        # 2. Tryb Auto (Równe odstępy)
+        elif ilosc > 0:
+            total_shelf_thickness = ilosc * GR_PLYTY
+            space_for_gaps = wys_wewnetrzna - total_shelf_thickness
+            gap_height = space_for_gaps / (ilosc + 1)
+            
+            for k in range(ilosc):
+                # Obliczamy gdzie fizycznie wypada spód półki
+                y_dol = (k + 1) * gap_height + (k * GR_PLYTY)
+                # Wiercimy niżej o offset podpórki
+                y_holes.append(y_dol - offset_podporka)
+        
+        # Generowanie punktów wierceń dla półek (zielone)
+        for y in y_holes:
+            otwory.append((offset_x, y, 'green'))
+            x_tyl = (D_MEBLA - 37.0) if strona_plyty == 'L' else 37.0
+            otwory.append((x_tyl, y, 'green'))
+            
+    return otwory
