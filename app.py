@@ -1,22 +1,32 @@
 import streamlit as st
 
-import matplotlib
-
-matplotlib.use('Agg') # Backend dla serwera (nie usuwać!)
-
-import matplotlib.pyplot as plt
-
-import matplotlib.patches as patches
-
-from matplotlib.backends.backend_pdf import PdfPages
-
 import pandas as pd
 
 import io
 
 # Konfiguracja strony
 
-st.set_page_config(page_title="STOLARZPRO - V19.3", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V19.4", page_icon="🪚", layout="wide")
+
+# Próba importu grafiki (bezpieczna)
+
+try:
+
+    import matplotlib
+
+    matplotlib.use('Agg')
+
+    import matplotlib.pyplot as plt
+
+    import matplotlib.patches as patches
+
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    GRAFIKA_DOSTEPNA = True
+
+except:
+
+    GRAFIKA_DOSTEPNA = False
 
 # ==========================================
 
@@ -28,7 +38,7 @@ def resetuj_projekt():
 
     defaults = {
 
-        'kod_pro': "RTV-FINAL", 'h_mebla': 600, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
+        'kod_pro': "RTV-SAFE", 'h_mebla': 600, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
 
         'il_przegrod': 2, 'typ_plecow': "Nakładane", 'sys_szuflad': "GTV Axis Pro", 'typ_boku': "C",
 
@@ -50,6 +60,8 @@ if 'kod_pro' not in st.session_state: resetuj_projekt()
 
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3', orientacja_frontu="L", podtytul=""):
 
+    if not GRAFIKA_DOSTEPNA: return None
+
     plt.close('all')
 
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -64,23 +76,15 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
 
         ax.add_patch(patches.Circle((x, y), radius=4, edgecolor=kolor, facecolor='white', linewidth=1.5))
 
-        if len(otwory) < 60:
-
-            ax.text(x + 10, y + 5, f"({x:.1f}, {y:.1f})", fontsize=6, color=kolor, weight='bold')
-
     
 
     if orientacja_frontu == 'L':
 
         ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='red', alpha=0.5))
 
-        ax.text(5, wys/2, "FRONT", rotation=90, color='red', fontsize=8)
-
     else:
 
         ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='red', alpha=0.5))
-
-        ax.text(szer-15, wys/2, "FRONT", rotation=90, color='red', fontsize=8)
 
     ax.set_aspect('equal')
 
@@ -89,6 +93,8 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
     return fig
 
 def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
+
+    if not GRAFIKA_DOSTEPNA: return None
 
     plt.close('all')
 
@@ -131,8 +137,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
                 yf = gr + 3 + i*(h_f + 3)
 
                 ax.add_patch(patches.Rectangle((curr_x+2, yf), szer_wneki-4, h_f, facecolor='#fdf0d5', edgecolor='#669bbc', linewidth=1))
-
-                ax.add_patch(patches.Circle((curr_x + szer_wneki/2, yf + h_f*0.8), radius=5, color='black'))
 
         elif sekcja['typ'] == "Półka":
 
@@ -220,7 +224,7 @@ BAZA_SYSTEMOW = {
 
 with st.sidebar:
 
-    st.title("🪚 STOLARZPRO V19.3")
+    st.title("🪚 STOLARZPRO V19.4")
 
     if st.button("🗑️ RESET", type="primary"): resetuj_projekt(); st.rerun()
 
@@ -388,76 +392,92 @@ with tabs[0]:
 
     st.subheader("Lista elementów")
 
-    # POPRAWKA: Usunięto parametr use_container_width
-
     st.dataframe(df.drop(columns=['wiercenia', 'orientacja']))
 
 with tabs[1]:
 
-    st.subheader("Dokumentacja")
+    if not GRAFIKA_DOSTEPNA:
 
-    col1, col2 = st.columns([1,3])
+        st.error("Błąd ładowania grafiki. Sprawdź requirements.txt")
 
-    with col1:
+    else:
 
-        if st.button("Generuj PDF"):
+        st.subheader("Dokumentacja")
 
-            pdf_buffer = io.BytesIO()
+        col1, col2 = st.columns([1,3])
 
-            with PdfPages(pdf_buffer) as pdf:
+        with col1:
 
-                for el in lista_elementow:
+            if st.button("Generuj PDF"):
 
-                    fig = rysuj_element(el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], el['wiercenia'], orientacja_frontu=el.get('orientacja', 'L'))
+                pdf_buffer = io.BytesIO()
 
-                    pdf.savefig(fig); plt.close(fig)
+                with PdfPages(pdf_buffer) as pdf:
 
-            st.session_state['pdf_ready'] = pdf_buffer
+                    for el in lista_elementow:
 
-            st.success("Gotowe!")
+                        fig = rysuj_element(el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], el['wiercenia'], orientacja_frontu=el.get('orientacja', 'L'))
 
-        if st.session_state.get('pdf_ready'):
+                        if fig: pdf.savefig(fig); plt.close(fig)
 
-            st.download_button("Pobierz PDF", st.session_state['pdf_ready'].getvalue(), "projekt.pdf", "application/pdf")
+                st.session_state['pdf_ready'] = pdf_buffer
 
-    
+                st.success("Gotowe!")
 
-    sel = st.selectbox("Podgląd elementu:", [e['ID'] for e in lista_elementow])
+            if st.session_state.get('pdf_ready'):
 
-    it = next(x for x in lista_elementow if x['ID'] == sel)
+                st.download_button("Pobierz PDF", st.session_state['pdf_ready'].getvalue(), "projekt.pdf", "application/pdf")
 
-    st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['wiercenia'], orientacja_frontu=it.get('orientacja', 'L')))
+        
+
+        sel = st.selectbox("Podgląd elementu:", [e['ID'] for e in lista_elementow])
+
+        it = next(x for x in lista_elementow if x['ID'] == sel)
+
+        st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['wiercenia'], orientacja_frontu=it.get('orientacja', 'L')))
 
 with tabs[2]:
 
-    st.subheader("Optymalizacja Rozkroju (Płyta 18mm)")
+    if not GRAFIKA_DOSTEPNA:
 
-    if st.button("Oblicz Rozkrój"):
+        st.error("Moduł rozkroju niedostępny")
 
-        p18 = [x for x in lista_elementow if "18mm" in x['Materiał']]
+    else:
 
-        wyniki = optymalizuj_rozkroj(p18, 2800, 2070)
+        st.subheader("Optymalizacja Rozkroju (Płyta 18mm)")
 
-        st.success(f"Potrzebne arkusze: {len(wyniki)}")
+        if st.button("Oblicz Rozkrój"):
 
-        for i, ark in enumerate(wyniki):
+            p18 = [x for x in lista_elementow if "18mm" in x['Materiał']]
 
-            fig, ax = plt.subplots(figsize=(10, 6))
+            wyniki = optymalizuj_rozkroj(p18, 2800, 2070)
 
-            ax.add_patch(patches.Rectangle((0,0), 2800, 2070, facecolor='#f0f0f0', edgecolor='black'))
+            st.success(f"Potrzebne arkusze: {len(wyniki)}")
 
-            for el in ark['elementy']:
+            for i, ark in enumerate(wyniki):
 
-                ax.add_patch(patches.Rectangle((el['x'], el['y']), el['w'], el['h'], facecolor='#e6ccb3', edgecolor='black'))
+                fig, ax = plt.subplots(figsize=(10, 6))
 
-                if el['w'] > 200: ax.text(el['x']+el['w']/2, el['y']+el['h']/2, el['id'], ha='center', fontsize=6)
+                ax.add_patch(patches.Rectangle((0,0), 2800, 2070, facecolor='#f0f0f0', edgecolor='black'))
 
-            ax.set_xlim(-100, 2900); ax.set_ylim(-100, 2200); ax.set_aspect('equal')
+                for el in ark['elementy']:
 
-            st.pyplot(fig)
+                    ax.add_patch(patches.Rectangle((el['x'], el['y']), el['w'], el['h'], facecolor='#e6ccb3', edgecolor='black'))
+
+                    if el['w'] > 200: ax.text(el['x']+el['w']/2, el['y']+el['h']/2, el['id'], ha='center', fontsize=6)
+
+                ax.set_xlim(-100, 2900); ax.set_ylim(-100, 2200); ax.set_aspect('equal')
+
+                st.pyplot(fig)
 
 with tabs[3]:
 
     st.subheader("Podgląd frontowy szafki")
 
-    st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ilosc_przegrod, konfiguracja, szer_jednej_wneki))
+    if GRAFIKA_DOSTEPNA:
+
+        st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ilosc_przegrod, konfiguracja, szer_jednej_wneki))
+
+    else:
+
+        st.error("Brak biblioteki graficznej.")
