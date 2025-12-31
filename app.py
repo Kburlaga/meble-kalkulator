@@ -1,5 +1,9 @@
 import streamlit as st
 
+import matplotlib
+
+matplotlib.use('Agg') # WAŻNE: Zapobiega błędom "Oh no" na serwerze
+
 import matplotlib.pyplot as plt
 
 import matplotlib.patches as patches
@@ -10,7 +14,7 @@ import pandas as pd
 
 import io
 
-st.set_page_config(page_title="STOLARZPRO - V19.1", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V19.2", page_icon="🪚", layout="wide")
 
 # ==========================================
 
@@ -22,7 +26,7 @@ def resetuj_projekt():
 
     defaults = {
 
-        'kod_pro': "RTV-MIRROR", 'h_mebla': 600, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
+        'kod_pro': "RTV-STABLE", 'h_mebla': 600, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
 
         'il_przegrod': 2, 'typ_plecow': "Nakładane", 'sys_szuflad': "GTV Axis Pro", 'typ_boku': "C",
 
@@ -44,6 +48,8 @@ if 'kod_pro' not in st.session_state: resetuj_projekt()
 
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3', orientacja_frontu="L", podtytul=""):
 
+    plt.close('all') # Czyścimy pamięć przed rysowaniem
+
     fig, ax = plt.subplots(figsize=(10, 6))
 
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla)
@@ -62,15 +68,13 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
 
     
 
-    # Oznaczenie Frontu
-
-    if orientacja_frontu == 'L': # Front z lewej (x=0)
+    if orientacja_frontu == 'L':
 
         ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='red', alpha=0.5))
 
         ax.text(5, wys/2, "FRONT", rotation=90, color='red', fontsize=8)
 
-    else: # Front z prawej (x=MAX)
+    else:
 
         ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='red', alpha=0.5))
 
@@ -83,6 +87,8 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
     return fig
 
 def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
+
+    plt.close('all')
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
@@ -212,7 +218,7 @@ BAZA_SYSTEMOW = {
 
 with st.sidebar:
 
-    st.title("🪚 STOLARZPRO V19.1")
+    st.title("🪚 STOLARZPRO V19.2")
 
     if st.button("🗑️ RESET", type="primary", use_container_width=True): resetuj_projekt(); st.rerun()
 
@@ -286,13 +292,7 @@ def oblicz_otwory(sekcja, mirror=False):
 
     otwory = []
 
-    # Standard: 37mm od Frontu. Mirror: D_MEBLA - 37mm
-
     x_pos = D_MEBLA - 37.0 if mirror else 37.0
-
-    x_pos_2 = D_MEBLA - 261.0 if mirror else 261.0
-
-    
 
     if sekcja['typ'] == "Szuflady" and sekcja['ilosc'] > 0:
 
@@ -302,13 +302,7 @@ def oblicz_otwory(sekcja, mirror=False):
 
             y = i*(h_f + 3) + 3 + params["offset_prowadnica"]
 
-            otwory.append((x_pos, y, 'red')) # Prowadnica
-
-            # Druga dziura prowadnicy (opcjonalnie)
-
-            # otwory.append((x_pos_2, y, 'red')) 
-
-            
+            otwory.append((x_pos, y, 'red'))
 
     elif sekcja['typ'] == "Półka":
 
@@ -326,55 +320,33 @@ def oblicz_otwory(sekcja, mirror=False):
 
             for k in range(cnt):
 
-                y = (k+1)*gap + k*18 - 2 # 2mm pod półką
+                y = (k+1)*gap + k*18 - 2
 
-                otwory.append((x_pos, y, 'green')) # Podpórka
-
-                otwory.append((x_pos_2, y, 'green')) # Podpórka tył
+                otwory.append((x_pos, y, 'green'))
 
     return otwory
 
-# BUDOWA MEBLA Z WIERCEŃIAMI
-
-# 1. BOK LEWY (Obsługuje Sekcję 1). Front = x=0. Wiercenia 37mm.
+# BUDOWA MEBLA
 
 otw_L = oblicz_otwory(konfiguracja[0], mirror=False)
 
 dodaj_element("Bok Lewy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", "", otw_L, "L")
 
-# 2. BOK PRAWY (Obsługuje Ostatnią Sekcję). Front = x=MAX. Wiercenia D-37mm (Lustro).
-
 otw_P = oblicz_otwory(konfiguracja[-1], mirror=True)
 
 dodaj_element("Bok Prawy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", "", otw_P, "P")
 
-# 3. PRZEGRODY (Obsługują L i P).
-
 for i in range(ilosc_przegrod):
-
-    # Przegroda obsługuje sekcję z lewej (i) oraz z prawej (i+1)
-
-    # Dla maszyny CNC traktujemy to jako nałożone otwory
-
-    # Lewa strona przegrody = Standard 37mm
-
-    # Prawa strona przegrody = Też 37mm (bo formatka jest obracana)
-
-    # Ale dla wizualizacji "przeźroczystej" nałożymy oba schematy
 
     o1 = oblicz_otwory(konfiguracja[i], mirror=False)
 
     o2 = oblicz_otwory(konfiguracja[i+1], mirror=False) 
-
-    # Uwaga: Przegrody wew. zazwyczaj mają 37mm z obu stron.
 
     dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", f"Sekcje {i+1}/{i+2}", o1+o2, "L")
 
 dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY)
 
 dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY)
-
-# ELEMENTY WEWNĘTRZNE
 
 for idx, k in enumerate(konfiguracja):
 
@@ -414,7 +386,9 @@ with tabs[0]:
 
     st.subheader("Lista elementów")
 
-    st.dataframe(df.drop(columns=['wiercenia', 'orientacja']), use_container_width=True)
+    # USUNIĘTO use_container_width=True
+
+    st.dataframe(df.drop(columns=['wiercenia', 'orientacja']))
 
 with tabs[1]:
 
