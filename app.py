@@ -6,7 +6,7 @@ import io
 
 # Konfiguracja strony
 
-st.set_page_config(page_title="STOLARZPRO - V19.5", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V19.6", page_icon="🪚", layout="wide")
 
 # Próba importu grafiki (bezpieczna)
 
@@ -82,17 +82,11 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
 
         for otw in otwory:
 
-            # Domyślny kolor 'red' jeśli brak w krotce
-
             x, y = otw[0], otw[1]
 
             kolor = otw[2] if len(otw) > 2 else 'red'
 
-            style = 'circle'
-
             
-
-            # Różne style dla różnych typów
 
             if kolor == 'blue': # Konstrukcyjne
 
@@ -110,7 +104,7 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
 
                 ax.text(x + 8, y + 2, f"({x:.0f},{y:.0f})", fontsize=7, color='black', alpha=0.7)
 
-    # Oznaczenie Frontu (okleina czerwona)
+    # Oznaczenie Frontu
 
     if orientacja_frontu == 'L':
 
@@ -124,9 +118,11 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
 
         ax.text(szer-15, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=9, weight='bold')
 
-    else: # Front na dole (np. dla szuflad)
+    elif orientacja_frontu == 'D': # Dół
 
         ax.add_patch(patches.Rectangle((0, -3), szer, 3, color='#d62828'))
+
+        ax.text(szer/2, 5, "FRONT", ha='center', color='#d62828', fontsize=9, weight='bold')
 
     # Wymiary
 
@@ -226,79 +222,43 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
 
 def optymalizuj_rozkroj(formatki, arkusz_w, arkusz_h, rzaz=4):
 
-    # Prosty algorytm półkowy (Shelf Algorithm)
-
     formatki_sorted = sorted(formatki, key=lambda x: x['Szerokość [mm]'] * x['Wysokość [mm]'], reverse=True)
 
     arkusze = []
 
-    aktualny_arkusz = {'elementy': [], 'zuzycie_m2': 0, 'odpad': 0}
+    aktualny_arkusz = {'elementy': [], 'zuzycie_m2': 0}
 
-    
-
-    cur_x, cur_y = 0, 0
-
-    max_h_row = 0
-
-    
+    cur_x, cur_y, max_h_row = 0, 0, 0
 
     for f in formatki_sorted:
 
         w, h = f['Szerokość [mm]'], f['Wysokość [mm]']
 
-        
-
-        # Sprawdź czy element w ogóle wejdzie na pusty arkusz
-
         if w > arkusz_w or h > arkusz_h: 
 
-            # Spróbuj obrócić
+            if h <= arkusz_w and w <= arkusz_h: w, h = h, w 
 
-            if h <= arkusz_w and w <= arkusz_h:
+            else: continue
 
-                w, h = h, w # Obrót
+        if cur_x + w + rzaz > arkusz_w: 
 
-            else:
+            cur_x = 0; cur_y += max_h_row + rzaz; max_h_row = 0
 
-                continue # Element za duży
-
-        
-
-        # Jeśli nie mieści się w poziomie
-
-        if cur_x + w + rzaz > arkusz_w:
-
-            cur_x = 0
-
-            cur_y += max_h_row + rzaz
-
-            max_h_row = 0
-
-            
-
-        # Jeśli nie mieści się w pionie (nowy arkusz)
-
-        if cur_y + h + rzaz > arkusz_h:
+        if cur_y + h + rzaz > arkusz_h: 
 
             arkusze.append(aktualny_arkusz)
 
-            aktualny_arkusz = {'elementy': [], 'zuzycie_m2': 0, 'odpad': 0}
+            aktualny_arkusz = {'elementy': [], 'zuzycie_m2': 0}
 
             cur_x, cur_y, max_h_row = 0, 0, 0
-
-            
 
         aktualny_arkusz['elementy'].append({'x': cur_x, 'y': cur_y, 'w': w, 'h': h, 'id': f['ID']})
 
         aktualny_arkusz['zuzycie_m2'] += (w * h) / 1000000
 
-        
-
         cur_x += w + rzaz
 
         if h > max_h_row: max_h_row = h
-
-        
 
     if aktualny_arkusz['elementy']: arkusze.append(aktualny_arkusz)
 
@@ -320,7 +280,7 @@ BAZA_SYSTEMOW = {
 
 with st.sidebar:
 
-    st.title("🪚 STOLARZPRO V19.5")
+    st.title("🪚 STOLARZPRO V19.6")
 
     if st.button("🗑️ RESET", type="primary"): resetuj_projekt(); st.rerun()
 
@@ -414,7 +374,7 @@ def otwory_boczne(sekcja, mirror=False):
 
     otwory = []
 
-    x_pos = D_MEBLA - 37.0 if mirror else 37.0 # Prowadnice/Podpórki są 37mm od frontu
+    x_pos = D_MEBLA - 37.0 if mirror else 37.0 
 
     if sekcja['typ'] == "Szuflady" and sekcja['ilosc'] > 0:
 
@@ -444,31 +404,23 @@ def otwory_boczne(sekcja, mirror=False):
 
                 y = (k+1)*gap + k*18 - 2
 
-                otwory.append((x_pos, y, 'green')) # Przód
+                otwory.append((x_pos, y, 'green'))
 
-                otwory.append((D_MEBLA - x_pos, y, 'green')) # Tył (symetrycznie)
+                otwory.append((D_MEBLA - x_pos, y, 'green'))
 
     return otwory
 
-def otwory_montazowe_poziome(szer, gl, typ="wieniec"):
-
-    # Generuje otwory montażowe na krawędziach elementu (np. wieńca lub półki)
+def otwory_montazowe_poziome(szer, gl):
 
     otw = []
-
-    # Standard: 37mm od krawędzi przedniej i tylnej, 9mm od boku (połowa płyty 18mm)
 
     y_front = 37
 
     y_back = gl - 37
 
-    # Lewa krawędź
-
     otw.append((9, y_front, 'blue'))
 
     otw.append((9, y_back, 'blue'))
-
-    # Prawa krawędź
 
     otw.append((szer-9, y_front, 'blue'))
 
@@ -477,8 +429,6 @@ def otwory_montazowe_poziome(szer, gl, typ="wieniec"):
     return otw
 
 # --- KONSTRUKCJA ---
-
-# 1. KORPUS
 
 otw_L = otwory_boczne(konfiguracja[0], mirror=False)
 
@@ -490,21 +440,17 @@ dodaj_element("Bok Prawy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", "",
 
 for i in range(ilosc_przegrod):
 
-    o1 = otwory_boczne(konfiguracja[i], mirror=False) # Lewa strona przegrody
+    o1 = otwory_boczne(konfiguracja[i], mirror=False)
 
-    o2 = otwory_boczne(konfiguracja[i+1], mirror=False) # Prawa strona
+    o2 = otwory_boczne(konfiguracja[i+1], mirror=False)
 
-    dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", f"Sekcje {i+1}/{i+2}", o1+o2, "L")
-
-# Wieńce (z otworami montażowymi do boków)
+    dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", f"S{i+1}/{i+2}", o1+o2, "L")
 
 otw_W = otwory_montazowe_poziome(W_MEBLA, D_MEBLA)
 
 dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", "", otw_W, "L")
 
 dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", "", otw_W, "L")
-
-# 2. WNĘTRZE
 
 for idx, k in enumerate(konfiguracja):
 
@@ -516,13 +462,9 @@ for idx, k in enumerate(konfiguracja):
 
             dodaj_element("Front Szuflady", szer_jednej_wneki-4, h_f, 18, "18mm FRONT", f"S{idx+1}", [], "D")
 
-            # Elementy 16mm
-
             dodaj_element("Dno Szuflady", szer_jednej_wneki-75, 476, 16, "16mm DNO", "", [], "D")
 
             dodaj_element("Tył Szuflady", szer_jednej_wneki-87, 167, 16, "16mm TYŁ", "", [], "D")
-
-            
 
     elif k['typ'] == "Półka":
 
@@ -533,8 +475,6 @@ for idx, k in enumerate(konfiguracja):
              try: cnt = len([x for x in k['custom_str'].split(',') if x.strip()])
 
              except: pass
-
-        # Półki mają otwory na krawędziach (do bolców/mimośrodów)
 
         otw_polka = otwory_montazowe_poziome(szer_jednej_wneki-2, D_MEBLA-20)
 
@@ -572,7 +512,23 @@ with tabs[1]:
 
                     for el in lista_elementow:
 
-                        fig = rysuj_element(el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], el['wiercenia'], el.get('orientacja', 'L'))
+                        # POPRAWKA ARGUMENTÓW: Przekazujemy argumenty nazwowo (keyword arguments)
+
+                        fig = rysuj_element(
+
+                            el['Szerokość [mm]'], 
+
+                            el['Wysokość [mm]'], 
+
+                            el['ID'], 
+
+                            el['Nazwa'], 
+
+                            otwory=el['wiercenia'], 
+
+                            orientacja_frontu=el.get('orientacja', 'L')
+
+                        )
 
                         if fig: pdf.savefig(fig); plt.close(fig)
 
@@ -590,7 +546,23 @@ with tabs[1]:
 
         it = next(x for x in lista_elementow if x['ID'] == sel)
 
-        st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['wiercenia'], it.get('orientacja', 'L')))
+        # POPRAWKA ARGUMENTÓW RÓWNIEŻ TUTAJ
+
+        st.pyplot(rysuj_element(
+
+            it['Szerokość [mm]'], 
+
+            it['Wysokość [mm]'], 
+
+            it['ID'], 
+
+            it['Nazwa'], 
+
+            otwory=it['wiercenia'], 
+
+            orientacja_frontu=it.get('orientacja', 'L')
+
+        ))
 
 with tabs[2]:
 
