@@ -1,4 +1,4 @@
-import streamlit as st
+mport streamlit as st
 
 import matplotlib.pyplot as plt
 
@@ -8,7 +8,7 @@ import pandas as pd
 
 import io
 
-st.set_page_config(page_title="STOLARZPRO - V18.3", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V18.4", page_icon="🪚", layout="wide")
 
 # ==========================================
 
@@ -122,8 +122,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
 
         elif sekcja['typ'] == "Półka":
 
-            # Wizualizacja uwzględnia tryb Custom!
-
             y_h = []
 
             custom_str = sekcja.get('custom_str', '')
@@ -180,7 +178,7 @@ BAZA_SYSTEMOW = {
 
 with st.sidebar:
 
-    st.title("🪚 STOLARZPRO V18.3")
+    st.title("🪚 STOLARZPRO V18.4")
 
     if st.button("🗑️ RESET", type="primary", use_container_width=True): resetuj_projekt(); st.rerun()
 
@@ -230,11 +228,9 @@ with st.sidebar:
 
                 
 
-                # --- OSTRZEŻENIE ---
-
                 if det['custom_str']:
 
-                    st.caption("⚠️ Tryb 'Custom' nadpisuje licznik ilości!")
+                    st.caption("⚠️ Tryb 'Custom' nadpisuje licznik!")
 
             
 
@@ -296,8 +292,6 @@ for idx, k in enumerate(konfiguracja):
 
     elif k['typ'] == "Półka":
 
-        # Logika dla listy elementów (uproszczona ilość)
-
         cnt = k['ilosc']
 
         if k['custom_str']:
@@ -335,5 +329,3 @@ with tabs[3]:
     st.subheader("Podgląd frontowy szafki")
 
     st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ilosc_przegrod, konfiguracja, szer_jednej_wneki))
-
-```
