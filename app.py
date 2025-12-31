@@ -2,7 +2,7 @@ import streamlit as st
 
 import matplotlib
 
-matplotlib.use('Agg') # WAŻNE: Zapobiega błędom "Oh no" na serwerze
+matplotlib.use('Agg') # Backend dla serwera (nie usuwać!)
 
 import matplotlib.pyplot as plt
 
@@ -14,7 +14,9 @@ import pandas as pd
 
 import io
 
-st.set_page_config(page_title="STOLARZPRO - V19.2", page_icon="🪚", layout="wide")
+# Konfiguracja strony
+
+st.set_page_config(page_title="STOLARZPRO - V19.3", page_icon="🪚", layout="wide")
 
 # ==========================================
 
@@ -26,7 +28,7 @@ def resetuj_projekt():
 
     defaults = {
 
-        'kod_pro': "RTV-STABLE", 'h_mebla': 600, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
+        'kod_pro': "RTV-FINAL", 'h_mebla': 600, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
 
         'il_przegrod': 2, 'typ_plecow': "Nakładane", 'sys_szuflad': "GTV Axis Pro", 'typ_boku': "C",
 
@@ -42,13 +44,13 @@ if 'kod_pro' not in st.session_state: resetuj_projekt()
 
 # ==========================================
 
-# 1. FUNKCJE RYSUNKOWE I LOGICZNE
+# 1. FUNKCJE RYSUNKOWE
 
 # ==========================================
 
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3', orientacja_frontu="L", podtytul=""):
 
-    plt.close('all') # Czyścimy pamięć przed rysowaniem
+    plt.close('all')
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -204,7 +206,7 @@ def optymalizuj_rozkroj(formatki, arkusz_w, arkusz_h, rzaz=4):
 
 # ==========================================
 
-# 3. INTERFEJS (SIDEBAR)
+# 3. INTERFEJS
 
 # ==========================================
 
@@ -218,9 +220,9 @@ BAZA_SYSTEMOW = {
 
 with st.sidebar:
 
-    st.title("🪚 STOLARZPRO V19.2")
+    st.title("🪚 STOLARZPRO V19.3")
 
-    if st.button("🗑️ RESET", type="primary", use_container_width=True): resetuj_projekt(); st.rerun()
+    if st.button("🗑️ RESET", type="primary"): resetuj_projekt(); st.rerun()
 
     st.header("1. Gabaryty")
 
@@ -386,7 +388,7 @@ with tabs[0]:
 
     st.subheader("Lista elementów")
 
-    # USUNIĘTO use_container_width=True
+    # POPRAWKA: Usunięto parametr use_container_width
 
     st.dataframe(df.drop(columns=['wiercenia', 'orientacja']))
 
