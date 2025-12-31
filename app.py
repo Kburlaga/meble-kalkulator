@@ -8,7 +8,7 @@ import pandas as pd
 
 import io
 
-st.set_page_config(page_title="STOLARZPRO - V18.2", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V18.3", page_icon="🪚", layout="wide")
 
 # ==========================================
 
@@ -68,7 +68,11 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
+    # Obrys
+
     ax.add_patch(patches.Rectangle((0, 0), w, h, linewidth=3, edgecolor='black', facecolor='none'))
+
+    # Wieńce i boki
 
     ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black'))
 
@@ -78,39 +82,77 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
 
     ax.add_patch(patches.Rectangle((w-gr, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black'))
 
+    
+
     curr_x = gr
 
     h_wew = h - 2*gr
 
+    
+
     for idx, sekcja in enumerate(konfig):
+
+        # Przegroda
 
         if idx < len(konfig) - 1:
 
             ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3))
 
+        
+
+        # Zawartość
+
         if sekcja['typ'] == "Szuflady":
 
             n = sekcja['ilosc']
 
-            h_f = (h_wew - ((n + 1) * 3)) / n 
+            if n > 0:
 
-            for i in range(n):
+                h_f = (h_wew - ((n + 1) * 3)) / n 
 
-                yf = gr + 3 + i*(h_f + 3)
+                for i in range(n):
 
-                ax.add_patch(patches.Rectangle((curr_x+2, yf), szer_wneki-4, h_f, facecolor='#fdf0d5', edgecolor='#669bbc', linewidth=1))
+                    yf = gr + 3 + i*(h_f + 3)
 
-                ax.add_patch(patches.Circle((curr_x + szer_wneki/2, yf + h_f*0.8), radius=5, color='black'))
+                    ax.add_patch(patches.Rectangle((curr_x+2, yf), szer_wneki-4, h_f, facecolor='#fdf0d5', edgecolor='#669bbc', linewidth=1))
+
+                    ax.add_patch(patches.Circle((curr_x + szer_wneki/2, yf + h_f*0.8), radius=5, color='black'))
+
+        
 
         elif sekcja['typ'] == "Półka":
 
+            # Wizualizacja uwzględnia tryb Custom!
+
+            y_h = []
+
+            custom_str = sekcja.get('custom_str', '')
+
             n_p = sekcja['ilosc']
 
-            for k in range(n_p):
+            
 
-                yp = gr + (k+1)*(h_wew / (n_p+1))
+            if custom_str and len(custom_str.strip()) > 0:
 
-                ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, 5, color='#bc6c25'))
+                try:
+
+                    y_h = [float(x.strip()) for x in custom_str.split(',') if x.strip()]
+
+                except: pass
+
+            elif n_p > 0:
+
+                gap = (h_wew - n_p*gr) / (n_p + 1)
+
+                y_h = [(k+1)*gap + k*gr for k in range(n_p)]
+
+            
+
+            for y_pos in y_h:
+
+                ax.add_patch(patches.Rectangle((curr_x, gr + y_pos), szer_wneki, 5, color='#bc6c25'))
+
+        
 
         curr_x += szer_wneki + gr
 
@@ -124,7 +166,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
 
 # ==========================================
 
-# 3. INTERFEJS
+# 3. INTERFEJS (SIDEBAR)
 
 # ==========================================
 
@@ -138,9 +180,11 @@ BAZA_SYSTEMOW = {
 
 with st.sidebar:
 
-    st.title("🪚 STOLARZPRO V18.2")
+    st.title("🪚 STOLARZPRO V18.3")
 
     if st.button("🗑️ RESET", type="primary", use_container_width=True): resetuj_projekt(); st.rerun()
+
+    
 
     st.header("1. Gabaryty")
 
@@ -150,6 +194,8 @@ with st.sidebar:
 
     D_MEBLA, GR_PLYTY = st.number_input("Głęb.", key='d_mebla'), st.number_input("Grubość", key='gr_plyty')
 
+    
+
     st.header("2. Wnętrze")
 
     ilosc_przegrod = st.number_input("Przegrody", min_value=0, key='il_przegrod')
@@ -158,19 +204,49 @@ with st.sidebar:
 
     konfiguracja = []
 
+    
+
     for i in range(ilosc_sekcji):
 
         with st.expander(f"Sekcja {i+1}", expanded=True):
 
             typ = st.selectbox(f"Typ #{i+1}", ["Szuflady", "Półka", "Pusta"], key=f"typ_{i}")
 
-            det = {'typ': typ, 'ilosc': 0}
+            det = {'typ': typ, 'ilosc': 0, 'custom_str': ''}
 
-            if typ == "Szuflady": det['ilosc'] = st.number_input(f"Ilość #{i+1}", 1, 5, 2, key=f"ile_{i}")
+            
 
-            elif typ == "Półka": det['ilosc'] = st.number_input(f"Ile półek? #{i+1}", 1, 10, 1, key=f"ile_p_{i}")
+            if typ == "Szuflady":
+
+                det['ilosc'] = st.number_input(f"Ilość #{i+1}", 1, 5, 2, key=f"ile_{i}")
+
+            elif typ == "Półka":
+
+                c_a, c_b = st.columns([1, 2])
+
+                det['ilosc'] = c_a.number_input(f"Ile?", 1, 10, 1, key=f"ile_p_{i}")
+
+                det['custom_str'] = c_b.text_input("Custom (mm)", placeholder="np. 200, 400", key=f"cust_{i}")
+
+                
+
+                # --- OSTRZEŻENIE ---
+
+                if det['custom_str']:
+
+                    st.caption("⚠️ Tryb 'Custom' nadpisuje licznik ilości!")
+
+            
 
             konfiguracja.append(det)
+
+    st.header("3. Detale")
+
+    sys_k = st.selectbox("System", list(BAZA_SYSTEMOW.keys()), key='sys_szuflad')
+
+    params = BAZA_SYSTEMOW[sys_k]
+
+    axis_fuga = st.number_input("Fuga", key='fuga')
 
 # ==========================================
 
@@ -210,7 +286,7 @@ dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY)
 
 for idx, k in enumerate(konfiguracja):
 
-    if k['typ'] == "Szuflady":
+    if k['typ'] == "Szuflady" and k['ilosc'] > 0:
 
         h_f = (wys_wewnetrzna - ((k['ilosc'] + 1) * 3)) / k['ilosc']
 
@@ -220,7 +296,17 @@ for idx, k in enumerate(konfiguracja):
 
     elif k['typ'] == "Półka":
 
-        for _ in range(k['ilosc']):
+        # Logika dla listy elementów (uproszczona ilość)
+
+        cnt = k['ilosc']
+
+        if k['custom_str']:
+
+             try: cnt = len([x for x in k['custom_str'].split(',') if x.strip()])
+
+             except: pass
+
+        for _ in range(cnt):
 
             dodaj_element("Półka", szer_jednej_wneki-2, D_MEBLA-20, 18, f"Sekcja {idx+1}")
 
@@ -238,7 +324,7 @@ with tabs[0]:
 
 with tabs[1]:
 
-    st.info("Wybierz element z listy, aby zobaczyć wiercenia (dostępne dla boków/przegród).")
+    st.info("Wybierz element z listy, aby zobaczyć wiercenia.")
 
 with tabs[2]:
 
