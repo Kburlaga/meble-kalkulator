@@ -8,7 +8,7 @@ st.set_page_config(page_title="STOLARZPRO - V20.3", page_icon="🪚", layout="wi
 # Próba importu grafiki z bezpiecznym backendem
 try:
     import matplotlib
-    matplotlib.use('Agg') # Kluczowe dla stabilności na serwerze
+    matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
     from matplotlib.backends.backend_pdf import PdfPages
@@ -37,84 +37,124 @@ def resetuj_projekt():
         'sys_zawiasow': "Blum Clip Top", 'typ_boku': "C",
         'fuga': 3.0, 'arkusz_w': 2800, 'arkusz_h': 2070, 'rzaz': 4
     }
-    for k, v in defaults.items(): st.session_state[k] = v
+    for k, v in defaults.items(): 
+        if k not in st.session_state:
+            st.session_state[k] = v
     
-    st.session_state['moduly_sekcji'] = {} 
+    if 'moduly_sekcji' not in st.session_state:
+        st.session_state['moduly_sekcji'] = {} 
+    
     st.session_state['pdf_ready'] = None
-    st.session_state['szablon_ready'] = None
 
 if 'kod_pro' not in st.session_state: resetuj_projekt()
 
 # ==========================================
-# 1. LOGIKA MODUŁÓW (CRUD)
+# 1. LOGIKA MODUŁÓW (CALLBACK - PEWNY ZAPIS)
 # ==========================================
-def dodaj_modul(nr_sekcji, typ, wysokosc_typ, wysokosc_mm, detale):
-    if nr_sekcji not in st.session_state['moduly_sekcji']:
-        st.session_state['moduly_sekcji'][nr_sekcji] = []
-    
-    nowy_modul = {
-        'typ': typ,
-        'wys_mode': wysokosc_typ,
-        'wys_mm': wysokosc_mm if wysokosc_typ == 'fixed' else 0,
-        'detale': detale 
-    }
-    st.session_state['moduly_sekcji'][nr_sekcji].append(nowy_modul)
-
 def usun_modul(nr_sekcji, idx):
     if nr_sekcji in st.session_state['moduly_sekcji']:
         st.session_state['moduly_sekcji'][nr_sekcji].pop(idx)
+        st.toast(f"Usunięto moduł z sekcji {nr_sekcji+1}")
+
+def dodaj_modul_callback(nr_sekcji):
+    """
+    Funkcja wywoływana BEZPOŚREDNIO przy kliknięciu przycisku.
+    Pobiera wartości z widgetów po ich kluczach (key).
+    """
+    # Pobierz wartości z formularza tej sekcji
+    typ = st.session_state.get(f"new_typ_{nr_sekcji}")
+    wys_opt = st.session_state.get(f"wys_opt_{nr_sekcji}")
+    wys_mm_input = st.session_state.get(f"h_mm_{nr_sekcji}", 0)
+    
+    # Ustal tryb wysokości
+    wys_mode = 'auto' if "AUTO" in wys_opt else 'fixed'
+    wys_mm = wys_mm_input if wys_mode == 'fixed' else 0
+    
+    # Pobierz detale
+    detale = {'ilosc': 0, 'drzwi': False}
+    
+    if typ == "Szuflady":
+        detale['ilosc'] = st.session_state.get(f"det_sz_{nr_sekcji}", 2)
+    elif typ == "Półki":
+        detale['ilosc'] = st.session_state.get(f"det_pl_{nr_sekcji}", 2)
+    
+    # Checkbox drzwi
+    if typ in ["Półki", "Drążek", "Pusta"]:
+        detale['drzwi'] = st.session_state.get(f"det_dr_{nr_sekcji}", False)
+
+    # Inicjalizacja listy jeśli nie istnieje
+    if nr_sekcji not in st.session_state['moduly_sekcji']:
+        st.session_state['moduly_sekcji'][nr_sekcji] = []
+    
+    # ZAPIS
+    nowy_modul = {
+        'typ': typ,
+        'wys_mode': wys_mode,
+        'wys_mm': wys_mm,
+        'detale': detale 
+    }
+    st.session_state['moduly_sekcji'][nr_sekcji].append(nowy_modul)
+    st.toast(f"✅ Dodano: {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 2. FUNKCJE RYSUNKOWE I SZABLONY
+# 2. RYSOWANIE (POPRAWIONA WIDOCZNOŚĆ)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Tło (zorder=1 - najniższa warstwa)
+    # Tło płyty (warstwa najniższa)
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
     ax.add_patch(rect)
     
-    # Otwory (zorder=10 - wyższa warstwa, zawsze na wierzchu)
+    # Otwory (POWIĘKSZONE I NA WIERZCHU)
     if otwory:
         for otw in otwory:
             x, y = otw[0], otw[1]
-            kolor = otw[2] if len(otw) > 2 else 'red'
+            # Domyślny kolor
+            kolor_kod = otw[2] if len(otw) > 2 else 'red'
             
-            if kolor == 'blue': 
-                ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='none', linestyle='--', zorder=10))
-                ax.add_patch(patches.Circle((x, y), radius=1, color='blue', zorder=10))
-            elif kolor == 'red': 
-                ax.add_patch(patches.Circle((x, y), radius=3, color='red', zorder=10)) 
-            elif kolor == 'green': 
+            if kolor_kod == 'blue': 
+                # Konfirmaty/Mimośrody - Niebieskie kółka
+                ax.add_patch(patches.Circle((x, y), radius=8, edgecolor='blue', facecolor='white', linewidth=2, zorder=20))
+                ax.add_patch(patches.Circle((x, y), radius=2, color='blue', zorder=21))
+                
+            elif kolor_kod == 'red': 
+                # Prowadnice - Czerwone kropki (Powiększone)
+                ax.add_patch(patches.Circle((x, y), radius=4, color='red', zorder=20))
+                ax.text(x+6, y, "Prowadnica", fontsize=6, color='red', zorder=25)
+                
+            elif kolor_kod == 'green': 
+                # Zawiasy/Półki - Zielone
                 if "Front" in nazwa:
-                    ax.add_patch(patches.Circle((x, y), radius=17.5, edgecolor='green', facecolor='#ccffcc', linewidth=1.5, zorder=10))
+                    # Puszka zawiasu (duża)
+                    ax.add_patch(patches.Circle((x, y), radius=17.5, edgecolor='green', facecolor='#ccffcc', linewidth=2, zorder=20))
                 else:
-                    ax.add_patch(patches.Circle((x, y), radius=4, edgecolor='green', facecolor='white', zorder=10))
+                    # Podpórka półki / Prowadnik (mała)
+                    ax.add_patch(patches.Circle((x, y), radius=4, edgecolor='green', facecolor='white', linewidth=2, zorder=20))
             
-            if len(otwory) < 60:
-                ax.text(x+8, y+2, f"({x:.0f},{y:.0f})", fontsize=7, alpha=0.7, zorder=20)
+            # Współrzędne otworu (opis)
+            if len(otwory) < 50:
+                ax.text(x+5, y+5, f"({x:.0f},{y:.0f})", fontsize=7, alpha=0.8, zorder=30, fontweight='bold')
 
-    # Orientacja
+    # Strzałka orientacji (Góra/Przód)
     if orientacja_frontu == 'L':
-        ax.add_patch(patches.Rectangle((-3, 0), 3, wys, color='#d62828', zorder=5))
-        ax.text(5, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=9, weight='bold', zorder=20)
+        ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='#d62828', zorder=5))
+        ax.text(10, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=12, weight='bold', zorder=15)
     elif orientacja_frontu == 'D': 
-        ax.add_patch(patches.Rectangle((0, -3), szer, 3, color='#d62828', zorder=5))
-        ax.text(szer/2, 5, "FRONT", ha='center', color='#d62828', fontsize=9, weight='bold', zorder=20)
+        ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
+        ax.text(szer/2, 10, "FRONT", ha='center', color='#d62828', fontsize=12, weight='bold', zorder=15)
     elif orientacja_frontu == 'P':
-        ax.add_patch(patches.Rectangle((szer, 0), 3, wys, color='#d62828', zorder=5))
-        ax.text(szer-15, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=9, weight='bold', zorder=20)
+        ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
+        ax.text(szer-20, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=12, weight='bold', zorder=15)
 
-    ax.text(szer/2, -15, f"{szer} mm", ha='center', weight='bold')
-    ax.text(-15, wys/2, f"{wys} mm", va='center', rotation=90, weight='bold')
+    ax.text(szer/2, -30, f"SZER: {szer} mm", ha='center', weight='bold', fontsize=12)
+    ax.text(-30, wys/2, f"WYS: {wys} mm", va='center', rotation=90, weight='bold', fontsize=12)
     
-    # === FIX: SZTYWNE GRANICE (Naprawia błąd Image size too large) ===
-    ax.set_xlim(-50, szer + 50)
-    ax.set_ylim(-50, wys + 50)
-    # =================================================================
-
+    # Fix granic (żeby kropki nie uciekały)
+    ax.set_xlim(-60, szer + 60)
+    ax.set_ylim(-60, wys + 60)
     ax.set_aspect('equal')
     ax.axis('off')
     return fig
@@ -127,16 +167,16 @@ def generuj_szablon_a4(element, rog):
     szer, wys = element['Szerokość [mm]'], element['Wysokość [mm]']
     otwory = element['wiercenia']
     
-    # Tło szablonu (zorder=1)
+    # Tło
     ax.add_patch(patches.Rectangle((0, 0), szer, wys, linewidth=3, edgecolor='black', facecolor='#eee', zorder=1))
     
     for otw in otwory:
         x, y = otw[0], otw[1]
         kolor = otw[2] if len(otw) > 2 else 'black'
-        # Krzyżyki nawiertów (zorder=10)
-        ax.plot([x-5, x+5], [y, y], color=kolor, linewidth=1, zorder=10)
-        ax.plot([x, x], [y-5, y+5], color=kolor, linewidth=1, zorder=10)
-        ax.text(x+2, y+2, f"({x:.1f}, {y:.1f})", fontsize=8, color=kolor, zorder=20)
+        # Wielkie krzyżyki na szablonie
+        ax.plot([x-8, x+8], [y, y], color=kolor, linewidth=2, zorder=10)
+        ax.plot([x, x], [y-8, y+8], color=kolor, linewidth=2, zorder=10)
+        ax.text(x+3, y+3, f"({x:.1f}, {y:.1f})", fontsize=10, color=kolor, zorder=20, weight='bold')
 
     a4_w, a4_h, m = 210, 297, 10
     
@@ -153,7 +193,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
     plt.close('all')
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Obrys mebla (zorder=5)
+    # Obrys mebla
     ax.add_patch(patches.Rectangle((0, 0), w, h, linewidth=3, edgecolor='black', facecolor='none', zorder=5))
     ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
     ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
@@ -165,7 +205,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
     
     for i in range(n_przeg + 1):
         if i < n_przeg:
-            # Przegroda pionowa
             ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3, zorder=1))
         
         moduly = moduly_sekcji.get(i, [])
@@ -179,8 +218,8 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
             for mod in moduly:
                 h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
                 
-                # Obrys modułu
-                ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_mod, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3, zorder=1))
+                # Ramka modułu
+                ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_mod, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3, zorder=2))
                 
                 det = mod['detale']
                 if mod['typ'] == "Szuflady":
@@ -189,9 +228,9 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
                         h_f = (h_mod - ((n-1)*3)) / n
                         for k in range(n):
                             yf = curr_y + k*(h_f+3)
-                            # Fronty szuflad (zorder=10)
+                            # Front szuflady
                             ax.add_patch(patches.Rectangle((curr_x+2, yf), szer_wneki-4, h_f, facecolor='#f4e1d2', edgecolor='#669bbc', zorder=10))
-                            ax.text(curr_x + szer_wneki/2, yf + h_f/2, "SZUFLADA", ha='center', va='center', fontsize=7, color='#004488', zorder=11, fontweight='bold')
+                            ax.text(curr_x + szer_wneki/2, yf + h_f/2, "SZUFLADA", ha='center', va='center', fontsize=8, color='#004488', zorder=11, fontweight='bold')
 
                 elif mod['typ'] == "Półki":
                     n = det.get('ilosc', 1)
@@ -199,8 +238,8 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
                         gap = h_mod / (n + 1)
                         for k in range(n):
                             yp = curr_y + (k+1)*gap
-                            # Półka (zorder=10)
-                            ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, gr, color='#bc6c25', zorder=10))
+                            # Półka - gruby brązowy pasek
+                            ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, gr, color='#8B4513', zorder=10))
 
                 elif mod['typ'] == "Drążek":
                     ax.add_patch(patches.Rectangle((curr_x+5, curr_y + h_mod - 60), szer_wneki-10, 15, facecolor='silver', edgecolor='black', zorder=10))
@@ -230,22 +269,30 @@ with st.sidebar:
     KOD_PROJEKTU = st.text_input("Nazwa", st.session_state['kod_pro']).upper()
     c1, c2 = st.columns(2)
     
-    # FIX: Poprawione wywołania inputów - to tu był błąd
-    H_MEBLA = c1.number_input("Wysokość", value=st.session_state['h_mebla'])
-    W_MEBLA = c2.number_input("Szerokość", value=st.session_state['w_mebla'])
-    D_MEBLA = c1.number_input("Głębokość", value=st.session_state['d_mebla'])
-    GR_PLYTY = c2.number_input("Grubość płyty", value=st.session_state['gr_plyty'])
+    # Widgety z kluczami, aby zachować stan
+    H_MEBLA = c1.number_input("Wysokość", value=st.session_state['h_mebla'], key='h_mebla_input')
+    W_MEBLA = c2.number_input("Szerokość", value=st.session_state['w_mebla'], key='w_mebla_input')
+    D_MEBLA = c1.number_input("Głębokość", value=st.session_state['d_mebla'], key='d_mebla_input')
+    GR_PLYTY = c2.number_input("Grubość płyty", value=st.session_state['gr_plyty'], key='gr_plyty_input')
     
-    ilosc_przegrod = st.number_input("Ilość przegród pionowych", min_value=0, value=st.session_state['il_przegrod'])
+    # Aktualizacja stanu
+    st.session_state['h_mebla'] = H_MEBLA
+    st.session_state['w_mebla'] = W_MEBLA
+    st.session_state['d_mebla'] = D_MEBLA
+    st.session_state['gr_plyty'] = GR_PLYTY
+    
+    ilosc_przegrod = st.number_input("Ilość przegród pionowych", min_value=0, value=st.session_state['il_przegrod'], key='il_przegrod_input')
+    st.session_state['il_przegrod'] = ilosc_przegrod
     ilosc_sekcji = ilosc_przegrod + 1
 
     st.markdown("### 2. Konfigurator Modułowy")
-    st.info("Buduj sekcje od dołu do góry. Użyj 'AUTO' żeby wypełnić resztę miejsca.")
+    st.info("Buduj sekcje od dołu do góry.")
 
     tabs_sekcji = st.tabs([f"Sekcja {i+1}" for i in range(ilosc_sekcji)])
     
     for i, tab in enumerate(tabs_sekcji):
         with tab:
+            # Lista dodanych modułów
             if i in st.session_state['moduly_sekcji'] and st.session_state['moduly_sekcji'][i]:
                 st.write("🔽 Dół szafy")
                 for idx, mod in enumerate(st.session_state['moduly_sekcji'][i]):
@@ -259,27 +306,27 @@ with st.sidebar:
                     c_info.markdown(opis)
                 st.write("🔼 Góra szafy")
                 st.markdown("---")
+            else:
+                st.info("Sekcja jest pusta.")
             
+            # Formularz dodawania
             c_typ, c_wys = st.columns([2, 1])
             new_typ = c_typ.selectbox("Typ", ["Półki", "Szuflady", "Drążek", "Pusta"], key=f"new_typ_{i}")
             wys_opt = c_wys.selectbox("Wysokość", ["Fixed (mm)", "AUTO (Reszta)"], key=f"wys_opt_{i}")
             
-            new_wys_mm = 0
-            if wys_opt == "Fixed (mm)":
-                new_wys_mm = st.number_input("Ile mm?", 100, 2000, 600, key=f"h_mm_{i}")
+            if "Fixed" in wys_opt:
+                st.number_input("Ile mm?", 100, 2000, 600, key=f"h_mm_{i}")
             
-            detale = {'ilosc': 0, 'drzwi': False}
             if new_typ == "Szuflady":
-                detale['ilosc'] = st.number_input("Ile szuflad?", 1, 6, 2, key=f"det_sz_{i}")
+                st.number_input("Ile szuflad?", 1, 6, 2, key=f"det_sz_{i}")
             elif new_typ == "Półki":
-                detale['ilosc'] = st.number_input("Ile półek?", 1, 10, 2, key=f"det_pl_{i}")
+                st.number_input("Ile półek?", 1, 10, 2, key=f"det_pl_{i}")
             
             if new_typ in ["Półki", "Drążek", "Pusta"]:
-                detale['drzwi'] = st.checkbox("Zamknij drzwiami?", key=f"det_dr_{i}")
+                st.checkbox("Zamknij drzwiami?", key=f"det_dr_{i}")
 
-            if st.button("➕ Dodaj Moduł", key=f"add_{i}"):
-                dodaj_modul(i, new_typ, 'auto' if "AUTO" in wys_opt else 'fixed', new_wys_mm, detale)
-                st.rerun()
+            # PRZYCISK Z CALLBACKIEM - ROZWIĄZANIE PROBLEMU ZAPISU
+            st.button("➕ Dodaj Moduł", key=f"add_{i}", on_click=dodaj_modul_callback, args=(i,))
 
     st.markdown("---")
     st.markdown("### 3. Okucia")
@@ -290,7 +337,7 @@ with st.sidebar:
     params_zawias = BAZA_ZAWIASOW[zaw_k]
 
 # ==========================================
-# 4. SILNIK OBLICZENIOWY (GENERATOR LISTY)
+# 4. SILNIK OBLICZENIOWY
 # ==========================================
 szer_wew_total = W_MEBLA - (2 * GR_PLYTY) - (ilosc_przegrod * GR_PLYTY)
 szer_jednej_wneki = szer_wew_total / ilosc_sekcji if ilosc_sekcji > 0 else 0
@@ -308,9 +355,10 @@ def dodaj_el(nazwa, szer, wys, gr, mat="18mm KORPUS", wiercenia=[], ori="L"):
 
 def gen_wiercenia_boku(moduly, is_mirror=False):
     otwory = []
+    # Parametry standardowe
     offset_2 = 224.0
-    x_f = D_MEBLA - 37.0 if is_mirror else 37.0
-    x_b = D_MEBLA - (37.0 + offset_2) if is_mirror else 37.0 + offset_2
+    x_f = 37.0
+    x_b = 37.0 + offset_2
     
     fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
     auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
@@ -327,23 +375,26 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
             otwory.append((x_f, curr_y + 100, 'green'))
             otwory.append((x_f, curr_y + h_mod - 100, 'green'))
 
-        # SZUFLADY
+        # SZUFLADY (Prowadnice)
         if mod['typ'] == "Szuflady":
             n = det.get('ilosc', 2)
-            h_front = (h_mod - ((n-1)*3)) / n
-            for k in range(n):
-                y_slide = curr_y + k*(h_front+3) + 3 + params_szuflad["offset_prowadnica"]
-                otwory.append((x_f, y_slide, 'red'))
-                otwory.append((x_b, y_slide, 'red'))
+            if n > 0:
+                h_front = (h_mod - ((n-1)*3)) / n
+                for k in range(n):
+                    # Y od dołu modułu
+                    y_slide = curr_y + k*(h_front+3) + 3 + params_szuflad["offset_prowadnica"]
+                    otwory.append((x_f, y_slide, 'red'))
+                    otwory.append((x_b, y_slide, 'red'))
         
-        # PÓŁKI
+        # PÓŁKI (Podpórki)
         elif mod['typ'] == "Półki":
             n = det.get('ilosc', 1)
-            gap = h_mod / (n + 1)
-            for k in range(n):
-                y_p = curr_y + (k+1)*gap
-                otwory.append((x_f, y_p, 'green'))
-                otwory.append((D_MEBLA - x_f, y_p, 'green'))
+            if n > 0:
+                gap = h_mod / (n + 1)
+                for k in range(n):
+                    y_p = curr_y + (k+1)*gap
+                    otwory.append((x_f, y_p, 'green'))
+                    otwory.append((D_MEBLA - 50, y_p, 'green'))
                 
         # DRĄŻEK
         elif mod['typ'] == "Drążek":
@@ -365,7 +416,7 @@ def gen_konstrukcja():
     otw_P = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(ilosc_sekcji-1, []), True)
     dodaj_el("Bok Prawy", D_MEBLA, boki_h, GR_PLYTY, "18mm KORPUS", otw_P, "P")
     
-    # Wieńce
+    # Wieńce (Konfirmaty)
     otw_W = [(9, 37, 'blue'), (9, D_MEBLA-37, 'blue'), (W_MEBLA-9, 37, 'blue'), (W_MEBLA-9, D_MEBLA-37, 'blue')]
     dodaj_el("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", [], "L")
     dodaj_el("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", [], "L")
@@ -374,10 +425,11 @@ def gen_konstrukcja():
     for i in range(ilosc_przegrod):
         mod_L = st.session_state['moduly_sekcji'].get(i, [])
         mod_R = st.session_state['moduly_sekcji'].get(i+1, [])
+        # Wiercenia z obu stron
         otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False) 
         dodaj_el(f"Przegroda {i+1}", D_MEBLA, boki_h, GR_PLYTY, "18mm KORPUS", otw, "L")
 
-    # Wypełnienie Modułami
+    # Wypełnienie Modułami (Formatki wewnętrzne)
     for i in range(ilosc_sekcji):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
         
@@ -431,7 +483,6 @@ df = pd.DataFrame(lista_elementow)
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🎯 SZABLONY 1:1", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
-    # Tabela na pełną szerokość
     st.dataframe(df.drop(columns=['wiercenia', 'orientacja']), width="stretch")
 
 with tabs[1]:
@@ -441,7 +492,7 @@ with tabs[1]:
             buf = io.BytesIO()
             with PdfPages(buf) as pdf:
                 for el in lista_elementow:
-                    plt.clf() # Czyszczenie pamięci
+                    plt.clf()
                     fig = rysuj_element(
                         szer=el['Szerokość [mm]'], 
                         wys=el['Wysokość [mm]'], 
