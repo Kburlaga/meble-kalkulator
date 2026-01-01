@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 # Konfiguracja strony
-st.set_page_config(page_title="STOLARZPRO - V19.8", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V19.9", page_icon="🪚", layout="wide")
 
 # Próba importu grafiki (bezpieczna)
 try:
@@ -28,6 +28,7 @@ def resetuj_projekt():
     }
     for k, v in defaults.items(): st.session_state[k] = v
     st.session_state['pdf_ready'] = None
+    st.session_state['szablon_ready'] = None
 
 if 'kod_pro' not in st.session_state: resetuj_projekt()
 
@@ -37,69 +38,125 @@ BAZA_SYSTEMOW = {
     "Blum Antaro": {"offset_prowadnica": 37.0, "offset_front_y": 45.5}
 }
 
-# Baza zawiasów (odległość środka puszki od krawędzi frontu - wymiar K + 17.5mm)
-# Standardowa puszka fi 35mm
+# Baza zawiasów
 BAZA_ZAWIASOW = {
-    "Blum Clip Top": {"puszka_offset": 21.5, "prowadnik_x": 37}, # 21.5mm to ok. 4mm od krawędzi
+    "Blum Clip Top": {"puszka_offset": 21.5, "prowadnik_x": 37}, 
     "GTV Prestige": {"puszka_offset": 22.0, "prowadnik_x": 37},
     "Hettich Sensys": {"puszka_offset": 22.5, "prowadnik_x": 37}
 }
 
 # ==========================================
-# 1. FUNKCJE RYSUNKOWE
+# 1. FUNKCJE RYSUNKOWE I SZABLONY
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3', orientacja_frontu="L", podtytul=""):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Rysuj Formatkę
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla)
     ax.add_patch(rect)
     
-    # Rysuj Otwory
     if otwory:
         for otw in otwory:
             x, y = otw[0], otw[1]
             kolor = otw[2] if len(otw) > 2 else 'red'
             
-            if kolor == 'blue': # Konstrukcyjne (Konfirmaty)
+            if kolor == 'blue': 
                 ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='none', linewidth=1.5, linestyle='--'))
                 ax.add_patch(patches.Circle((x, y), radius=1, color='blue'))
-            elif kolor == 'red': # Prowadnice (Szuflady)
+            elif kolor == 'red': 
                 ax.add_patch(patches.Circle((x, y), radius=3, color='red')) 
-            elif kolor == 'green': # Zawiasy / Półki
-                # Rozróżnienie: Jeśli to Front Drzwi, rysujemy dużą puszkę (fi 35 -> r=17.5)
+            elif kolor == 'green': 
                 if "Front Drzwi" in nazwa:
                     ax.add_patch(patches.Circle((x, y), radius=17.5, edgecolor='green', facecolor='#ccffcc', linewidth=1.5))
-                    ax.add_patch(patches.Circle((x, y), radius=1, color='green')) # Środek
+                    ax.add_patch(patches.Circle((x, y), radius=1, color='green'))
                 else:
-                    # Prowadnik na boku lub półka
                     ax.add_patch(patches.Circle((x, y), radius=4, edgecolor='green', facecolor='white', linewidth=1.5))
             
             if len(otwory) < 60:
                 ax.text(x + 8, y + 2, f"({x:.0f},{y:.0f})", fontsize=7, color='black', alpha=0.7)
 
-    # Oznaczenie Frontu
+    # Oznaczenia
     if orientacja_frontu == 'L':
         ax.add_patch(patches.Rectangle((-3, 0), 3, wys, color='#d62828'))
         ax.text(5, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=9, weight='bold')
-    elif orientacja_frontu == 'P':
-        ax.add_patch(patches.Rectangle((szer, 0), 3, wys, color='#d62828'))
-        ax.text(szer-15, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=9, weight='bold')
-    elif orientacja_frontu == 'D': # Dół
+    elif orientacja_frontu == 'D': 
         ax.add_patch(patches.Rectangle((0, -3), szer, 3, color='#d62828'))
         ax.text(szer/2, 5, "FRONT", ha='center', color='#d62828', fontsize=9, weight='bold')
 
-    # Wymiary
     ax.text(szer/2, -15, f"{szer} mm", ha='center', weight='bold')
     ax.text(-15, wys/2, f"{wys} mm", va='center', rotation=90, weight='bold')
 
     ax.set_aspect('equal')
-    ax.set_title(f"{id_elementu} | {nazwa}\n{podtytul}", fontsize=12, weight='bold')
-    ax.set_xlim(-50, szer+50)
-    ax.set_ylim(-50, wys+50)
-    ax.axis('off')
+    ax.set_title(f"{id_elementu} | {nazwa}", fontsize=12, weight='bold')
+    ax.set_xlim(-50, szer+50); ax.set_ylim(-50, wys+50); ax.axis('off')
+    return fig
+
+def generuj_szablon_a4(element, rog):
+    """
+    Generuje wykres 1:1 dla formatu A4 (210x297mm) skupiony na wybranym rogu.
+    """
+    if not GRAFIKA_DOSTEPNA: return None
+    plt.close('all')
+    
+    # A4 w calach (dla matplotlib)
+    # 210mm / 25.4 = 8.27 cala
+    # 297mm / 25.4 = 11.69 cala
+    fig, ax = plt.subplots(figsize=(8.27, 11.69)) # Portrait
+    
+    szer = element['Szerokość [mm]']
+    wys = element['Wysokość [mm]']
+    otwory = element['wiercenia']
+    
+    # Rysujemy obrys całej formatki (nawet jak wyjdzie poza kadr)
+    rect = patches.Rectangle((0, 0), szer, wys, linewidth=3, edgecolor='black', facecolor='#eee')
+    ax.add_patch(rect)
+    
+    # Rysujemy otwory jako celowniki (lepsze do punktowania)
+    for otw in otwory:
+        x, y = otw[0], otw[1]
+        kolor = otw[2] if len(otw) > 2 else 'black'
+        # Celownik
+        ax.plot([x-5, x+5], [y, y], color=kolor, linewidth=1)
+        ax.plot([x, x], [y-5, y+5], color=kolor, linewidth=1)
+        ax.add_patch(patches.Circle((x, y), radius=1.5, color=kolor)) # Punkt środka
+        # Opis współrzędnych przy otworze
+        ax.text(x+2, y+2, f"({x:.1f}, {y:.1f})", fontsize=8, color=kolor)
+
+    # Ustawienie widoku (Zoom na narożnik) - A4 to 210x297mm
+    a4_w = 210
+    a4_h = 297
+    
+    margin = 10 # Margines wewnątrz papieru
+    
+    if rog == "Lewy-Dół (LD)":
+        ax.set_xlim(-margin, a4_w - margin)
+        ax.set_ylim(-margin, a4_h - margin)
+        anchor_text = "PRZYŁÓŻ DO LEWEGO DOLNEGO ROGU ↙"
+        ax.text(10, 10, anchor_text, fontsize=12, fontweight='bold', color='red', bbox=dict(facecolor='white'))
+        
+    elif rog == "Lewy-Góra (LG)":
+        ax.set_xlim(-margin, a4_w - margin)
+        ax.set_ylim(wys - a4_h + margin, wys + margin)
+        anchor_text = "PRZYŁÓŻ DO LEWEGO GÓRNEGO ROGU ↖"
+        ax.text(10, wys-20, anchor_text, fontsize=12, fontweight='bold', color='red', bbox=dict(facecolor='white'))
+        
+    elif rog == "Prawy-Dół (PD)":
+        ax.set_xlim(szer - a4_w + margin, szer + margin)
+        ax.set_ylim(-margin, a4_h - margin)
+        anchor_text = "PRZYŁÓŻ DO PRAWEGO DOLNEGO ROGU ↘"
+        ax.text(szer-a4_w+20, 10, anchor_text, fontsize=12, fontweight='bold', color='red', bbox=dict(facecolor='white'))
+        
+    elif rog == "Prawy-Góra (PG)":
+        ax.set_xlim(szer - a4_w + margin, szer + margin)
+        ax.set_ylim(wys - a4_h + margin, wys + margin)
+        anchor_text = "PRZYŁÓŻ DO PRAWEGO GÓRNEGO ROGU ↗"
+        ax.text(szer-a4_w+20, wys-20, anchor_text, fontsize=12, fontweight='bold', color='red', bbox=dict(facecolor='white'))
+
+    ax.set_aspect('equal')
+    ax.grid(True, linestyle=':', alpha=0.5)
+    ax.set_xlabel("Oś X [mm] (Skala 1:1 przy druku bez skalowania)", fontsize=8)
+    
     return fig
 
 def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
@@ -123,7 +180,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
         if idx < len(konfig) - 1:
             ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3))
         
-        # Rysowanie zawartości
         if sekcja['typ'] == "Szuflady" and sekcja['ilosc'] > 0:
             n = sekcja['ilosc']
             h_f = (h_wew - ((n + 1) * 3)) / n 
@@ -140,7 +196,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
                      yp = gr + (k+1)*gap + k*gr
                      ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, 5, color='#bc6c25'))
         
-        # Rysowanie drzwi (symbolicznie jako obrys)
         if sekcja.get('ma_drzwi'):
              ax.add_patch(patches.Rectangle((curr_x+1, gr+1), szer_wneki-2, h_wew-2, 
                                           facecolor='green', alpha=0.1, edgecolor='green', linestyle='--'))
@@ -185,7 +240,7 @@ def optymalizuj_rozkroj(formatki, arkusz_w, arkusz_h, rzaz=4):
 # 3. INTERFEJS
 # ==========================================
 with st.sidebar:
-    st.title("🪚 STOLARZPRO V19.8")
+    st.title("🪚 STOLARZPRO V19.9")
     if st.button("🗑️ RESET", type="primary"): resetuj_projekt(); st.rerun()
     st.markdown("---")
     
@@ -245,8 +300,6 @@ def dodaj_element(nazwa, szer, wys, gr, material="18mm KORPUS", uwagi="", wierce
 # --- OBLICZANIE OTWORÓW ---
 def otwory_boczne(sekcja, mirror=False):
     otwory = []
-    
-    # 1. Obliczenie pozycji X (głębokości)
     offset_sruby_2 = 224.0 
     
     if not mirror: # Lewy bok
@@ -256,16 +309,11 @@ def otwory_boczne(sekcja, mirror=False):
         x_front = D_MEBLA - 37.0
         x_back = D_MEBLA - (37.0 + offset_sruby_2)
     
-    # --- LOGIKA ZAWIASÓW (ZIELONE) ---
     if sekcja['ma_drzwi']:
-        # Standard: 100mm od góry i dołu dla prowadników
-        y_top = 100.0
-        y_bot = wys_wewnetrzna - 100.0
-        # Prowadnik zawsze 37mm od krawędzi (x_front)
+        y_top = 100.0; y_bot = wys_wewnetrzna - 100.0
         otwory.append((x_front, y_top, 'green'))
         otwory.append((x_front, y_bot, 'green'))
 
-    # --- LOGIKA SZUFLAD (CZERWONE) ---
     if sekcja['typ'] == "Szuflady" and sekcja['ilosc'] > 0:
         h_f = (wys_wewnetrzna - ((sekcja['ilosc'] + 1) * 3)) / sekcja['ilosc']
         for i in range(sekcja['ilosc']):
@@ -273,7 +321,6 @@ def otwory_boczne(sekcja, mirror=False):
             otwory.append((x_front, y, 'red'))
             otwory.append((x_back, y, 'red'))
             
-    # --- LOGIKA PÓŁEK (ZIELONE - podpórki) ---
     elif sekcja['typ'] == "Półka":
         cnt = sekcja['ilosc']
         if sekcja['custom_str']:
@@ -289,102 +336,76 @@ def otwory_boczne(sekcja, mirror=False):
 
 def otwory_montazowe_poziome(szer, gl):
     otw = []
-    y_front = 37
-    y_back = gl - 37
-    # NIEBIESKIE (KONFIRMATY)
-    otw.append((9, y_front, 'blue'))
-    otw.append((9, y_back, 'blue'))
-    otw.append((szer-9, y_front, 'blue'))
-    otw.append((szer-9, y_back, 'blue'))
+    y_front = 37; y_back = gl - 37
+    otw.append((9, y_front, 'blue')); otw.append((9, y_back, 'blue'))
+    otw.append((szer-9, y_front, 'blue')); otw.append((szer-9, y_back, 'blue'))
     return otw
 
 # --- KONSTRUKCJA ---
-# Bok Lewy
 otw_L = otwory_boczne(konfiguracja[0], mirror=False)
 dodaj_element("Bok Lewy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", "", otw_L, "L")
 
-# Bok Prawy
 otw_P = otwory_boczne(konfiguracja[-1], mirror=True)
 dodaj_element("Bok Prawy", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", "", otw_P, "P")
 
-# Przegrody
 for i in range(ilosc_przegrod):
     o1 = otwory_boczne(konfiguracja[i], mirror=False)
     o2 = otwory_boczne(konfiguracja[i+1], mirror=False)
     dodaj_element("Przegroda", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", f"S{i+1}/{i+2}", o1+o2, "L")
 
-# Wieńce
 otw_W = otwory_montazowe_poziome(W_MEBLA, D_MEBLA)
 dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", "", otw_W, "L")
 dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", "", otw_W, "L")
 
 # Wypełnienie
 for idx, k in enumerate(konfiguracja):
-    # 1. Jeśli wybrano DRZWI -> Dodaj front drzwiowy
     if k['ma_drzwi']:
-        wys_frontu = wys_wewnetrzna - 4 # Szczelina góra/dół
-        szer_frontu = szer_jednej_wneki - 4 # Szczelina boki
-        
-        # Otwory pod puszki zawiasów (na froncie)
+        wys_frontu = wys_wewnetrzna - 4 
+        szer_frontu = szer_jednej_wneki - 4 
         offset_puszki = params_zawias['puszka_offset']
-        y_top = 100.0
-        y_bot = wys_frontu - 100.0
-        otwory_drzwi = [
-            (offset_puszki, y_top, 'green'), # Góra
-            (offset_puszki, y_bot, 'green')  # Dół
-        ]
-        
+        y_top = 100.0; y_bot = wys_frontu - 100.0
+        otwory_drzwi = [(offset_puszki, y_top, 'green'), (offset_puszki, y_bot, 'green')]
         dodaj_element("Front Drzwi", szer_frontu, wys_frontu, 18, "18mm FRONT", f"S{idx+1}", otwory_drzwi, "L")
 
-    # 2. Elementy wewnątrz (Szuflady / Półki)
     if k['typ'] == "Szuflady" and k['ilosc'] > 0:
         h_f = (wys_wewnetrzna - ((k['ilosc'] + 1) * 3)) / k['ilosc']
         for _ in range(k['ilosc']):
-            # Jeśli są drzwi, fronty szuflad są wewnętrzne (bez zmian w wymiarach, ale etykieta)
             nazwa_frontu = "Czoło Szuflady Wew." if k['ma_drzwi'] else "Front Szuflady"
-            mat_frontu = "18mm FRONT" if not k['ma_drzwi'] else "18mm KORPUS" # Wewnętrzne często z płyty korpusowej
+            mat_frontu = "18mm FRONT" if not k['ma_drzwi'] else "18mm KORPUS"
             
             dodaj_element(nazwa_frontu, szer_jednej_wneki-4, h_f, 18, mat_frontu, f"S{idx+1}", [], "D")
-            dodaj_element("Dno Szuflady", szer_jednej_wneki-75, 476, 16, "16mm DNO", "", [], "D")
-            dodaj_element("Tył Szuflady", szer_jednej_wneki-87, 167, 16, "16mm TYŁ", "", [], "D")
+            # TU BYŁO ŹLE - TERAZ DNO I TYŁ SĄ WYRAŹNIE ODDZIELONE MATERIAŁEM
+            dodaj_element("Dno Szuflady", szer_jednej_wneki-75, 476, 3, "3mm HDF", "", [], "D")
+            dodaj_element("Tył Szuflady", szer_jednej_wneki-87, 167, 16, "16mm BIAŁA", "", [], "D")
             
     elif k['typ'] == "Półka":
         cnt = k['ilosc']
         if k['custom_str']:
              try: cnt = len([x for x in k['custom_str'].split(',') if x.strip()])
              except: pass
-        
         otw_polka = otwory_montazowe_poziome(szer_jednej_wneki-2, D_MEBLA-20)
-        # Jeśli są drzwi, półka jest cofnięta? Zazwyczaj tak, ale tutaj upraszczamy (taka sama głębokość)
-        # Można odjąć np. 20mm jeśli drzwi wpuszczane, ale przy nakładanych (standard) jest ok.
-        
         for _ in range(cnt):
             dodaj_element("Półka", szer_jednej_wneki-2, D_MEBLA-20, 18, "18mm KORPUS", f"S{idx+1}", otw_polka, "L")
 
 # --- TABS ---
 df = pd.DataFrame(lista_elementow)
-tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI / PDF", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA 2D"])
+tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI / PDF", "🎯 SZABLONY 1:1", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA 2D"])
 
 with tabs[0]:
     st.dataframe(df.drop(columns=['wiercenia', 'orientacja']), use_container_width=False)
 
 with tabs[1]:
-    if not GRAFIKA_DOSTEPNA:
-        st.error("Błąd grafiki (brak Matplotlib).")
+    if not GRAFIKA_DOSTEPNA: st.error("Błąd grafiki.")
     else:
         c1, c2 = st.columns([1,3])
         with c1:
-            if st.button("📄 Generuj PDF"):
+            if st.button("📄 Generuj PDF (Całość)"):
                 pdf_buffer = io.BytesIO()
                 with PdfPages(pdf_buffer) as pdf:
                     for el in lista_elementow:
                         fig = rysuj_element(
-                            el['Szerokość [mm]'], 
-                            el['Wysokość [mm]'], 
-                            el['ID'], 
-                            el['Nazwa'], 
-                            otwory=el['wiercenia'], 
-                            orientacja_frontu=el.get('orientacja', 'L')
+                            el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], 
+                            otwory=el['wiercenia'], orientacja_frontu=el.get('orientacja', 'L')
                         )
                         if fig: pdf.savefig(fig); plt.close(fig)
                 st.session_state['pdf_ready'] = pdf_buffer
@@ -394,25 +415,37 @@ with tabs[1]:
         
         sel = st.selectbox("Wybierz element:", [e['ID'] for e in lista_elementow])
         it = next(x for x in lista_elementow if x['ID'] == sel)
-        
-        st.pyplot(rysuj_element(
-            it['Szerokość [mm]'], 
-            it['Wysokość [mm]'], 
-            it['ID'], 
-            it['Nazwa'], 
-            otwory=it['wiercenia'], 
-            orientacja_frontu=it.get('orientacja', 'L')
-        ))
+        st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], otwory=it['wiercenia'], orientacja_frontu=it.get('orientacja', 'L')))
 
 with tabs[2]:
-    if not GRAFIKA_DOSTEPNA: st.error("Błąd grafiki.")
-    else:
-        st.header("Optymalizacja Rozkroju")
-        
-        # 1. PŁYTA 18mm
-        p18 = [x for x in lista_elementow if "18mm" in x['Materiał']]
+    st.subheader("Generator Szablonów A4 (Skala 1:1)")
+    st.info("Wybierz element i narożnik, aby wygenerować szablon do wiercenia. Drukuj bez skalowania!")
+    
+    col_sz1, col_sz2 = st.columns(2)
+    el_szablon = col_sz1.selectbox("Element", [e['ID'] for e in lista_elementow], key='szablon_sel')
+    rog_szablon = col_sz2.selectbox("Który róg?", ["Lewy-Dół (LD)", "Lewy-Góra (LG)", "Prawy-Dół (PD)", "Prawy-Góra (PG)"])
+    
+    item = next(x for x in lista_elementow if x['ID'] == el_szablon)
+    
+    if st.button("Generuj Szablon A4"):
+        fig_sz = generuj_szablon_a4(item, rog_szablon)
+        if fig_sz:
+            pdf_sz = io.BytesIO()
+            with PdfPages(pdf_sz) as pdf:
+                pdf.savefig(fig_sz)
+            st.session_state['szablon_ready'] = pdf_sz
+            st.pyplot(fig_sz)
+    
+    if st.session_state.get('szablon_ready'):
+        st.download_button("💾 Pobierz Szablon (PDF A4)", st.session_state['szablon_ready'].getvalue(), f"szablon_{item['ID']}.pdf", "application/pdf")
+
+with tabs[3]:
+    st.header("Optymalizacja Rozkroju")
+    
+    # 1. PŁYTA 18mm
+    p18 = [x for x in lista_elementow if "18mm" in x['Materiał']]
+    if p18:
         st.subheader(f"🟦 Płyta 18mm (Elementów: {len(p18)})")
-        
         if st.button("Oblicz 18mm"):
             wyniki = optymalizuj_rozkroj(p18, 2800, 2070)
             st.success(f"Potrzebne arkusze: {len(wyniki)}")
@@ -426,7 +459,41 @@ with tabs[2]:
                 ax.set_xlim(-50, 2850); ax.set_ylim(-50, 2150); ax.set_aspect('equal'); ax.axis('off')
                 st.pyplot(fig)
 
-with tabs[3]:
+    # 2. PŁYTA 16mm (Tyły szuflad)
+    p16 = [x for x in lista_elementow if "16mm" in x['Materiał']]
+    if p16:
+        st.markdown("---")
+        st.subheader(f"🟩 Płyta 16mm (Elementów: {len(p16)})")
+        if st.button("Oblicz 16mm"):
+            wyniki16 = optymalizuj_rozkroj(p16, 2800, 2070)
+            st.success(f"Potrzebne arkusze: {len(wyniki16)}")
+            for i, ark in enumerate(wyniki16):
+                fig, ax = plt.subplots(figsize=(8, 5))
+                ax.add_patch(patches.Rectangle((0,0), 2800, 2070, facecolor='#eee', edgecolor='black'))
+                for el in ark['elementy']:
+                    ax.add_patch(patches.Rectangle((el['x'], el['y']), el['w'], el['h'], facecolor='#606c38', edgecolor='white'))
+                    if el['w'] > 150: ax.text(el['x']+el['w']/2, el['y']+el['h']/2, el['id'], ha='center', fontsize=6, color='white')
+                ax.set_xlim(-50, 2850); ax.set_ylim(-50, 2150); ax.set_aspect('equal'); ax.axis('off')
+                st.pyplot(fig)
+                
+    # 3. HDF 3mm (Dna szuflad)
+    p3 = [x for x in lista_elementow if "3mm" in x['Materiał']]
+    if p3:
+        st.markdown("---")
+        st.subheader(f"🟫 Płyta HDF 3mm (Elementów: {len(p3)})")
+        if st.button("Oblicz HDF"):
+            wyniki3 = optymalizuj_rozkroj(p3, 2800, 2070)
+            st.success(f"Potrzebne arkusze: {len(wyniki3)}")
+            for i, ark in enumerate(wyniki3):
+                fig, ax = plt.subplots(figsize=(8, 5))
+                ax.add_patch(patches.Rectangle((0,0), 2800, 2070, facecolor='#eee', edgecolor='black'))
+                for el in ark['elementy']:
+                    ax.add_patch(patches.Rectangle((el['x'], el['y']), el['w'], el['h'], facecolor='#9c6644', edgecolor='white'))
+                    if el['w'] > 150: ax.text(el['x']+el['w']/2, el['y']+el['h']/2, el['id'], ha='center', fontsize=6, color='white')
+                ax.set_xlim(-50, 2850); ax.set_ylim(-50, 2150); ax.set_aspect('equal'); ax.axis('off')
+                st.pyplot(fig)
+
+with tabs[4]:
     if GRAFIKA_DOSTEPNA:
         st.subheader("Podgląd frontowy")
         st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ilosc_przegrod, konfiguracja, szer_jednej_wneki))
