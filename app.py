@@ -5,10 +5,10 @@ import io
 # Konfiguracja strony
 st.set_page_config(page_title="STOLARZPRO - V20.3", page_icon="🪚", layout="wide")
 
-# Próba importu grafiki
+# Próba importu grafiki z bezpiecznym backendem
 try:
     import matplotlib
-    matplotlib.use('Agg')
+    matplotlib.use('Agg') # Kluczowe dla stabilności na serwerze
     import matplotlib.pyplot as plt
     import matplotlib.patches as patches
     from matplotlib.backends.backend_pdf import PdfPages
@@ -413,7 +413,7 @@ df = pd.DataFrame(lista_elementow)
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🎯 SZABLONY 1:1", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
-    # POPRAWKA 2026: Zmieniono use_container_width=True na width="stretch"
+    # POPRAWKA 2026: Zmieniono parametr na width="stretch"
     st.dataframe(df.drop(columns=['wiercenia', 'orientacja']), width="stretch")
 
 with tabs[1]:
@@ -423,7 +423,7 @@ with tabs[1]:
             buf = io.BytesIO()
             with PdfPages(buf) as pdf:
                 for el in lista_elementow:
-                    # FIX: Jawnie nazwane argumenty
+                    plt.clf() # POPRAWKA: Czyszczenie pamięci przed każdym rysunkiem
                     fig = rysuj_element(
                         szer=el['Szerokość [mm]'], 
                         wys=el['Wysokość [mm]'], 
@@ -432,7 +432,9 @@ with tabs[1]:
                         otwory=el['wiercenia'], 
                         orientacja_frontu=el['orientacja']
                     )
-                    if fig: pdf.savefig(fig); plt.close(fig)
+                    if fig: 
+                        pdf.savefig(fig)
+                        plt.close(fig) # Zamknięcie figury
             st.session_state['pdf_ready'] = buf
         
         if st.session_state['pdf_ready']:
@@ -441,7 +443,6 @@ with tabs[1]:
         sel = c2.selectbox("Wybierz element:", [e['ID'] for e in lista_elementow])
         it = next(x for x in lista_elementow if x['ID'] == sel)
         
-        # FIX: Jawnie nazwane argumenty
         st.pyplot(rysuj_element(
             szer=it['Szerokość [mm]'], 
             wys=it['Wysokość [mm]'], 
