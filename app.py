@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 # Konfiguracja strony
-st.set_page_config(page_title="STOLARZPRO - V20.1", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V20.2", page_icon="🪚", layout="wide")
 
 # Próba importu grafiki
 try:
@@ -69,15 +69,17 @@ def usun_modul(nr_sekcji, idx):
 # ==========================================
 # 2. FUNKCJE RYSUNKOWE I SZABLONY
 # ==========================================
-# POPRAWIONA DEFINICJA
-def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3', orientacja_frontu="L"):
+# POPRAWKA KRYTYCZNA: Zmieniona kolejność argumentów (orientacja przed kolorem)
+def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
     fig, ax = plt.subplots(figsize=(10, 6))
     
+    # Rysowanie tła (formatki)
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla)
     ax.add_patch(rect)
     
+    # Rysowanie otworów
     if otwory:
         for otw in otwory:
             x, y = otw[0], otw[1]
@@ -89,14 +91,15 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
             elif kolor == 'red': 
                 ax.add_patch(patches.Circle((x, y), radius=3, color='red')) 
             elif kolor == 'green': 
-                if "Front" in nazwa:
+                if "Front" in nazwa: # Puszka
                     ax.add_patch(patches.Circle((x, y), radius=17.5, edgecolor='green', facecolor='#ccffcc', linewidth=1.5))
-                else:
+                else: # Prowadnik
                     ax.add_patch(patches.Circle((x, y), radius=4, edgecolor='green', facecolor='white'))
             
             if len(otwory) < 60:
                 ax.text(x+8, y+2, f"({x:.0f},{y:.0f})", fontsize=7, alpha=0.7)
 
+    # Oznaczenie frontu (krawędź)
     if orientacja_frontu == 'L':
         ax.add_patch(patches.Rectangle((-3, 0), 3, wys, color='#d62828'))
         ax.text(5, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=9, weight='bold')
@@ -158,7 +161,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
         if i < n_przeg:
             ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3))
         
-        # Rysowanie modułów w sekcji
         moduly = moduly_sekcji.get(i, [])
         if moduly:
             fixed_h_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
@@ -170,7 +172,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
             for mod in moduly:
                 h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
                 
-                # Tło modułu
                 ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_mod, facecolor='none', edgecolor='black', linestyle=':', alpha=0.5))
                 
                 det = mod['detale']
@@ -212,7 +213,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
 # 3. INTERFEJS GŁÓWNY (SIDEBAR)
 # ==========================================
 with st.sidebar:
-    st.title("🪚 STOLARZPRO V20.1")
+    st.title("🪚 STOLARZPRO V20.2")
     if st.button("🗑️ NOWY PROJEKT", type="primary"): resetuj_projekt(); st.rerun()
     
     st.markdown("### 1. Gabaryty")
@@ -227,7 +228,6 @@ with st.sidebar:
     st.markdown("### 2. Konfigurator Modułowy")
     st.info("Buduj sekcje od dołu do góry. Użyj 'AUTO' żeby wypełnić resztę miejsca.")
 
-    # TABS DLA SEKCJI
     tabs_sekcji = st.tabs([f"Sekcja {i+1}" for i in range(ilosc_sekcji)])
     
     for i, tab in enumerate(tabs_sekcji):
@@ -425,7 +425,7 @@ with tabs[1]:
             buf = io.BytesIO()
             with PdfPages(buf) as pdf:
                 for el in lista_elementow:
-                    # POPRAWKA argumentów
+                    # POPRAWIONE WYWOŁANIE (dla pewności używam nazwanych argumentów)
                     fig = rysuj_element(
                         el['Szerokość [mm]'], 
                         el['Wysokość [mm]'], 
@@ -443,7 +443,7 @@ with tabs[1]:
         sel = c2.selectbox("Wybierz element:", [e['ID'] for e in lista_elementow])
         it = next(x for x in lista_elementow if x['ID'] == sel)
         
-        # POPRAWKA argumentów
+        # POPRAWIONE WYWOŁANIE (Nazwane argumenty!)
         st.pyplot(rysuj_element(
             it['Szerokość [mm]'], 
             it['Wysokość [mm]'], 
