@@ -229,9 +229,12 @@ with st.sidebar:
     st.markdown("### 1. Gabaryty")
     KOD_PROJEKTU = st.text_input("Nazwa", st.session_state['kod_pro']).upper()
     c1, c2 = st.columns(2)
-    # FIX: Poprawione przypisanie zmiennych w jednej linii
-    H_MEBLA, W_MEBLA = c1.number_input("Wysokość", value=st.session_state['h_mebla']), c2.number_input("Szerokość", value=st.session_state['w_mebla'])
-    D_MEBLA, GR_PLYTY = c1.number_input("Głębokość", value=st.session_state['d_mebla']), c2.number_input("Grubość płyty", value=st.session_state['gr_plyty'])
+    
+    # FIX: Poprawione wywołania inputów - to tu był błąd
+    H_MEBLA = c1.number_input("Wysokość", value=st.session_state['h_mebla'])
+    W_MEBLA = c2.number_input("Szerokość", value=st.session_state['w_mebla'])
+    D_MEBLA = c1.number_input("Głębokość", value=st.session_state['d_mebla'])
+    GR_PLYTY = c2.number_input("Grubość płyty", value=st.session_state['gr_plyty'])
     
     ilosc_przegrod = st.number_input("Ilość przegród pionowych", min_value=0, value=st.session_state['il_przegrod'])
     ilosc_sekcji = ilosc_przegrod + 1
