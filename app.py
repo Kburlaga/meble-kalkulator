@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 # Konfiguracja strony
-st.set_page_config(page_title="STOLARZPRO - V19.7", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V19.8", page_icon="🪚", layout="wide")
 
 # Próba importu grafiki (bezpieczna)
 try:
@@ -17,18 +17,33 @@ except ImportError:
     GRAFIKA_DOSTEPNA = False
 
 # ==========================================
-# 0. RESETOWANIE
+# 0. RESETOWANIE I BAZY DANYCH
 # ==========================================
 def resetuj_projekt():
     defaults = {
         'kod_pro': "RTV-PRO", 'h_mebla': 600, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
-        'il_przegrod': 2, 'typ_plecow': "Nakładane", 'sys_szuflad': "GTV Axis Pro", 'typ_boku': "C",
+        'il_przegrod': 2, 'typ_plecow': "Nakładane", 'sys_szuflad': "GTV Axis Pro", 
+        'sys_zawiasow': "Blum Clip Top", 'typ_boku': "C",
         'fuga': 3.0, 'nl': 500, 'arkusz_w': 2800, 'arkusz_h': 2070, 'rzaz': 4
     }
     for k, v in defaults.items(): st.session_state[k] = v
     st.session_state['pdf_ready'] = None
 
 if 'kod_pro' not in st.session_state: resetuj_projekt()
+
+# Baza prowadnic szuflad
+BAZA_SYSTEMOW = {
+    "GTV Axis Pro": {"offset_prowadnica": 37.5, "offset_front_y": 47.5},
+    "Blum Antaro": {"offset_prowadnica": 37.0, "offset_front_y": 45.5}
+}
+
+# Baza zawiasów (odległość środka puszki od krawędzi frontu - wymiar K + 17.5mm)
+# Standardowa puszka fi 35mm
+BAZA_ZAWIASOW = {
+    "Blum Clip Top": {"puszka_offset": 21.5, "prowadnik_x": 37}, # 21.5mm to ok. 4mm od krawędzi
+    "GTV Prestige": {"puszka_offset": 22.0, "prowadnik_x": 37},
+    "Hettich Sensys": {"puszka_offset": 22.5, "prowadnik_x": 37}
+}
 
 # ==========================================
 # 1. FUNKCJE RYSUNKOWE
@@ -52,9 +67,15 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
                 ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='none', linewidth=1.5, linestyle='--'))
                 ax.add_patch(patches.Circle((x, y), radius=1, color='blue'))
             elif kolor == 'red': # Prowadnice (Szuflady)
-                ax.add_patch(patches.Circle((x, y), radius=3, color='red')) # Mała czerwona kropka
-            elif kolor == 'green': # Półki / Zawiasy
-                ax.add_patch(patches.Circle((x, y), radius=4, edgecolor='green', facecolor='white', linewidth=1.5))
+                ax.add_patch(patches.Circle((x, y), radius=3, color='red')) 
+            elif kolor == 'green': # Zawiasy / Półki
+                # Rozróżnienie: Jeśli to Front Drzwi, rysujemy dużą puszkę (fi 35 -> r=17.5)
+                if "Front Drzwi" in nazwa:
+                    ax.add_patch(patches.Circle((x, y), radius=17.5, edgecolor='green', facecolor='#ccffcc', linewidth=1.5))
+                    ax.add_patch(patches.Circle((x, y), radius=1, color='green')) # Środek
+                else:
+                    # Prowadnik na boku lub półka
+                    ax.add_patch(patches.Circle((x, y), radius=4, edgecolor='green', facecolor='white', linewidth=1.5))
             
             if len(otwory) < 60:
                 ax.text(x + 8, y + 2, f"({x:.0f},{y:.0f})", fontsize=7, color='black', alpha=0.7)
@@ -102,6 +123,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
         if idx < len(konfig) - 1:
             ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3))
         
+        # Rysowanie zawartości
         if sekcja['typ'] == "Szuflady" and sekcja['ilosc'] > 0:
             n = sekcja['ilosc']
             h_f = (h_wew - ((n + 1) * 3)) / n 
@@ -112,15 +134,18 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
         
         elif sekcja['typ'] == "Półka":
              cnt = sekcja['ilosc']
-             if sekcja['custom_str']:
-                 try: cnt = len([x for x in sekcja['custom_str'].split(',') if x.strip()])
-                 except: pass
              if cnt > 0:
                  gap = (h_wew - cnt*gr) / (cnt + 1)
                  for k in range(cnt):
                      yp = gr + (k+1)*gap + k*gr
                      ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, 5, color='#bc6c25'))
         
+        # Rysowanie drzwi (symbolicznie jako obrys)
+        if sekcja.get('ma_drzwi'):
+             ax.add_patch(patches.Rectangle((curr_x+1, gr+1), szer_wneki-2, h_wew-2, 
+                                          facecolor='green', alpha=0.1, edgecolor='green', linestyle='--'))
+             ax.text(curr_x + szer_wneki/2, h/2, "DRZWI", ha='center', va='center', fontsize=10, color='green', fontweight='bold', alpha=0.5)
+
         curr_x += szer_wneki + gr
 
     ax.set_xlim(-100, w + 100); ax.set_ylim(-100, h + 100)
@@ -159,13 +184,8 @@ def optymalizuj_rozkroj(formatki, arkusz_w, arkusz_h, rzaz=4):
 # ==========================================
 # 3. INTERFEJS
 # ==========================================
-BAZA_SYSTEMOW = {
-    "GTV Axis Pro": {"offset_prowadnica": 37.5, "offset_front_y": 47.5, "offset_front_x": 15.5},
-    "Blum Antaro": {"offset_prowadnica": 37.0, "offset_front_y": 45.5, "offset_front_x": 15.5}
-}
-
 with st.sidebar:
-    st.title("🪚 STOLARZPRO V19.7")
+    st.title("🪚 STOLARZPRO V19.8")
     if st.button("🗑️ RESET", type="primary"): resetuj_projekt(); st.rerun()
     st.markdown("---")
     
@@ -181,8 +201,11 @@ with st.sidebar:
     
     for i in range(ilosc_sekcji):
         with st.expander(f"Sekcja {i+1}", expanded=True):
-            typ = st.selectbox(f"Typ", ["Szuflady", "Półka", "Pusta"], key=f"typ_{i}", label_visibility="collapsed")
-            det = {'typ': typ, 'ilosc': 0, 'custom_str': ''}
+            col_typ, col_drzwi = st.columns([2, 1])
+            typ = col_typ.selectbox(f"Typ", ["Szuflady", "Półka", "Pusta"], key=f"typ_{i}", label_visibility="collapsed")
+            ma_drzwi = col_drzwi.checkbox("Drzwi?", key=f"drzwi_{i}")
+            
+            det = {'typ': typ, 'ilosc': 0, 'custom_str': '', 'ma_drzwi': ma_drzwi}
             
             if typ == "Szuflady": det['ilosc'] = st.number_input(f"Ilość", 1, 5, 2, key=f"ile_{i}")
             elif typ == "Półka":
@@ -192,8 +215,12 @@ with st.sidebar:
             konfiguracja.append(det)
             
     st.markdown("---")
-    sys_k = st.selectbox("System", list(BAZA_SYSTEMOW.keys()), key='sys_szuflad')
-    params = BAZA_SYSTEMOW[sys_k]
+    c_s1, c_s2 = st.columns(2)
+    sys_k = c_s1.selectbox("Prowadnice", list(BAZA_SYSTEMOW.keys()), key='sys_szuflad')
+    zaw_k = c_s2.selectbox("Zawiasy", list(BAZA_ZAWIASOW.keys()), key='sys_zawiasow')
+    
+    params_szuflad = BAZA_SYSTEMOW[sys_k]
+    params_zawias = BAZA_ZAWIASOW[zaw_k]
 
 # ==========================================
 # 4. LOGIKA GŁÓWNA
@@ -220,27 +247,33 @@ def otwory_boczne(sekcja, mirror=False):
     otwory = []
     
     # 1. Obliczenie pozycji X (głębokości)
-    # 37mm to standard od krawędzi frontowej.
-    # 224mm to rozstaw drugiej śruby (można zmienić).
     offset_sruby_2 = 224.0 
     
-    if not mirror: # Lewy bok (front jest z lewej -> x=0)
+    if not mirror: # Lewy bok
         x_front = 37.0
         x_back = 37.0 + offset_sruby_2
-    else: # Prawy bok (front jest z prawej -> x=D_MEBLA)
+    else: # Prawy bok
         x_front = D_MEBLA - 37.0
         x_back = D_MEBLA - (37.0 + offset_sruby_2)
     
-    # 2. Generowanie otworów
+    # --- LOGIKA ZAWIASÓW (ZIELONE) ---
+    if sekcja['ma_drzwi']:
+        # Standard: 100mm od góry i dołu dla prowadników
+        y_top = 100.0
+        y_bot = wys_wewnetrzna - 100.0
+        # Prowadnik zawsze 37mm od krawędzi (x_front)
+        otwory.append((x_front, y_top, 'green'))
+        otwory.append((x_front, y_bot, 'green'))
+
+    # --- LOGIKA SZUFLAD (CZERWONE) ---
     if sekcja['typ'] == "Szuflady" and sekcja['ilosc'] > 0:
         h_f = (wys_wewnetrzna - ((sekcja['ilosc'] + 1) * 3)) / sekcja['ilosc']
         for i in range(sekcja['ilosc']):
-            y = i*(h_f + 3) + 3 + params["offset_prowadnica"]
-            
-            # CZERWONE KROPKI (PROWADNICE) - ZAWSZE DWA OTWORY
+            y = i*(h_f + 3) + 3 + params_szuflad["offset_prowadnica"]
             otwory.append((x_front, y, 'red'))
             otwory.append((x_back, y, 'red'))
             
+    # --- LOGIKA PÓŁEK (ZIELONE - podpórki) ---
     elif sekcja['typ'] == "Półka":
         cnt = sekcja['ilosc']
         if sekcja['custom_str']:
@@ -250,7 +283,6 @@ def otwory_boczne(sekcja, mirror=False):
             gap = (wys_wewnetrzna - cnt*18) / (cnt + 1)
             for k in range(cnt):
                 y = (k+1)*gap + k*18 - 2
-                # ZIELONE KROPKI (PÓŁKI) - SYMETRYCZNIE
                 otwory.append((x_front, y, 'green'))
                 otwory.append((D_MEBLA - x_front, y, 'green'))
     return otwory
@@ -259,7 +291,7 @@ def otwory_montazowe_poziome(szer, gl):
     otw = []
     y_front = 37
     y_back = gl - 37
-    # NIEBIESKIE KROPKI (KONFIRMATY)
+    # NIEBIESKIE (KONFIRMATY)
     otw.append((9, y_front, 'blue'))
     otw.append((9, y_back, 'blue'))
     otw.append((szer-9, y_front, 'blue'))
@@ -288,10 +320,31 @@ dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", "", ot
 
 # Wypełnienie
 for idx, k in enumerate(konfiguracja):
+    # 1. Jeśli wybrano DRZWI -> Dodaj front drzwiowy
+    if k['ma_drzwi']:
+        wys_frontu = wys_wewnetrzna - 4 # Szczelina góra/dół
+        szer_frontu = szer_jednej_wneki - 4 # Szczelina boki
+        
+        # Otwory pod puszki zawiasów (na froncie)
+        offset_puszki = params_zawias['puszka_offset']
+        y_top = 100.0
+        y_bot = wys_frontu - 100.0
+        otwory_drzwi = [
+            (offset_puszki, y_top, 'green'), # Góra
+            (offset_puszki, y_bot, 'green')  # Dół
+        ]
+        
+        dodaj_element("Front Drzwi", szer_frontu, wys_frontu, 18, "18mm FRONT", f"S{idx+1}", otwory_drzwi, "L")
+
+    # 2. Elementy wewnątrz (Szuflady / Półki)
     if k['typ'] == "Szuflady" and k['ilosc'] > 0:
         h_f = (wys_wewnetrzna - ((k['ilosc'] + 1) * 3)) / k['ilosc']
         for _ in range(k['ilosc']):
-            dodaj_element("Front Szuflady", szer_jednej_wneki-4, h_f, 18, "18mm FRONT", f"S{idx+1}", [], "D")
+            # Jeśli są drzwi, fronty szuflad są wewnętrzne (bez zmian w wymiarach, ale etykieta)
+            nazwa_frontu = "Czoło Szuflady Wew." if k['ma_drzwi'] else "Front Szuflady"
+            mat_frontu = "18mm FRONT" if not k['ma_drzwi'] else "18mm KORPUS" # Wewnętrzne często z płyty korpusowej
+            
+            dodaj_element(nazwa_frontu, szer_jednej_wneki-4, h_f, 18, mat_frontu, f"S{idx+1}", [], "D")
             dodaj_element("Dno Szuflady", szer_jednej_wneki-75, 476, 16, "16mm DNO", "", [], "D")
             dodaj_element("Tył Szuflady", szer_jednej_wneki-87, 167, 16, "16mm TYŁ", "", [], "D")
             
@@ -302,6 +355,9 @@ for idx, k in enumerate(konfiguracja):
              except: pass
         
         otw_polka = otwory_montazowe_poziome(szer_jednej_wneki-2, D_MEBLA-20)
+        # Jeśli są drzwi, półka jest cofnięta? Zazwyczaj tak, ale tutaj upraszczamy (taka sama głębokość)
+        # Można odjąć np. 20mm jeśli drzwi wpuszczane, ale przy nakładanych (standard) jest ok.
+        
         for _ in range(cnt):
             dodaj_element("Półka", szer_jednej_wneki-2, D_MEBLA-20, 18, "18mm KORPUS", f"S{idx+1}", otw_polka, "L")
 
