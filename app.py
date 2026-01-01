@@ -109,7 +109,15 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
 
     ax.text(szer/2, -15, f"{szer} mm", ha='center', weight='bold')
     ax.text(-15, wys/2, f"{wys} mm", va='center', rotation=90, weight='bold')
-    ax.set_aspect('equal'); ax.axis('off')
+    
+    # === FIX: SZTYWNE GRANICE (To naprawia błąd Image size too large) ===
+    # Zapobiega próbie wygenerowania obrazka 5000x5000 cali przy błędnym skalowaniu
+    ax.set_xlim(-50, szer + 50)
+    ax.set_ylim(-50, wys + 50)
+    # ====================================================================
+
+    ax.set_aspect('equal')
+    ax.axis('off')
     return fig
 
 def generuj_szablon_a4(element, rog):
