@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 # Konfiguracja strony
-st.set_page_config(page_title="STOLARZPRO - V19.6", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V19.7", page_icon="🪚", layout="wide")
 
 # Próba importu grafiki (bezpieczna)
 try:
@@ -48,11 +48,13 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
             x, y = otw[0], otw[1]
             kolor = otw[2] if len(otw) > 2 else 'red'
             
-            if kolor == 'blue': # Konstrukcyjne
+            if kolor == 'blue': # Konstrukcyjne (Konfirmaty)
                 ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='none', linewidth=1.5, linestyle='--'))
                 ax.add_patch(patches.Circle((x, y), radius=1, color='blue'))
-            else: # Prowadnice / Półki
-                ax.add_patch(patches.Circle((x, y), radius=4, edgecolor=kolor, facecolor='white', linewidth=1.5))
+            elif kolor == 'red': # Prowadnice (Szuflady)
+                ax.add_patch(patches.Circle((x, y), radius=3, color='red')) # Mała czerwona kropka
+            elif kolor == 'green': # Półki / Zawiasy
+                ax.add_patch(patches.Circle((x, y), radius=4, edgecolor='green', facecolor='white', linewidth=1.5))
             
             if len(otwory) < 60:
                 ax.text(x + 8, y + 2, f"({x:.0f},{y:.0f})", fontsize=7, color='black', alpha=0.7)
@@ -87,7 +89,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
     # Obrys mebla
     ax.add_patch(patches.Rectangle((0, 0), w, h, linewidth=3, edgecolor='black', facecolor='none'))
     
-    # Korpus (góra, dół, boki)
+    # Korpus
     ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black'))
     ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black'))
     ax.add_patch(patches.Rectangle((0, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black'))
@@ -97,11 +99,9 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
     h_wew = h - 2*gr
     
     for idx, sekcja in enumerate(konfig):
-        # Przegrody
         if idx < len(konfig) - 1:
             ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3))
         
-        # Wypełnienie sekcji
         if sekcja['typ'] == "Szuflady" and sekcja['ilosc'] > 0:
             n = sekcja['ilosc']
             h_f = (h_wew - ((n + 1) * 3)) / n 
@@ -115,7 +115,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, konfig, szer_wneki):
              if sekcja['custom_str']:
                  try: cnt = len([x for x in sekcja['custom_str'].split(',') if x.strip()])
                  except: pass
-             
              if cnt > 0:
                  gap = (h_wew - cnt*gr) / (cnt + 1)
                  for k in range(cnt):
@@ -137,17 +136,13 @@ def optymalizuj_rozkroj(formatki, arkusz_w, arkusz_h, rzaz=4):
 
     for f in formatki_sorted:
         w, h = f['Szerokość [mm]'], f['Wysokość [mm]']
-        
-        # Obracanie jeśli za duże
         if w > arkusz_w or h > arkusz_h: 
             if h <= arkusz_w and w <= arkusz_h: w, h = h, w 
             else: continue
 
-        # Sprawdzenie czy mieści się w wierszu
         if cur_x + w + rzaz > arkusz_w: 
             cur_x = 0; cur_y += max_h_row + rzaz; max_h_row = 0
         
-        # Sprawdzenie czy mieści się na arkuszu (nowy arkusz)
         if cur_y + h + rzaz > arkusz_h: 
             arkusze.append(aktualny_arkusz)
             aktualny_arkusz = {'elementy': [], 'zuzycie_m2': 0}
@@ -170,7 +165,7 @@ BAZA_SYSTEMOW = {
 }
 
 with st.sidebar:
-    st.title("🪚 STOLARZPRO V19.6")
+    st.title("🪚 STOLARZPRO V19.7")
     if st.button("🗑️ RESET", type="primary"): resetuj_projekt(); st.rerun()
     st.markdown("---")
     
@@ -223,13 +218,28 @@ def dodaj_element(nazwa, szer, wys, gr, material="18mm KORPUS", uwagi="", wierce
 # --- OBLICZANIE OTWORÓW ---
 def otwory_boczne(sekcja, mirror=False):
     otwory = []
-    x_pos = D_MEBLA - 37.0 if mirror else 37.0 
     
+    # 1. Obliczenie pozycji X (głębokości)
+    # 37mm to standard od krawędzi frontowej.
+    # 224mm to rozstaw drugiej śruby (można zmienić).
+    offset_sruby_2 = 224.0 
+    
+    if not mirror: # Lewy bok (front jest z lewej -> x=0)
+        x_front = 37.0
+        x_back = 37.0 + offset_sruby_2
+    else: # Prawy bok (front jest z prawej -> x=D_MEBLA)
+        x_front = D_MEBLA - 37.0
+        x_back = D_MEBLA - (37.0 + offset_sruby_2)
+    
+    # 2. Generowanie otworów
     if sekcja['typ'] == "Szuflady" and sekcja['ilosc'] > 0:
         h_f = (wys_wewnetrzna - ((sekcja['ilosc'] + 1) * 3)) / sekcja['ilosc']
         for i in range(sekcja['ilosc']):
             y = i*(h_f + 3) + 3 + params["offset_prowadnica"]
-            otwory.append((x_pos, y, 'red'))
+            
+            # CZERWONE KROPKI (PROWADNICE) - ZAWSZE DWA OTWORY
+            otwory.append((x_front, y, 'red'))
+            otwory.append((x_back, y, 'red'))
             
     elif sekcja['typ'] == "Półka":
         cnt = sekcja['ilosc']
@@ -240,14 +250,16 @@ def otwory_boczne(sekcja, mirror=False):
             gap = (wys_wewnetrzna - cnt*18) / (cnt + 1)
             for k in range(cnt):
                 y = (k+1)*gap + k*18 - 2
-                otwory.append((x_pos, y, 'green'))
-                otwory.append((D_MEBLA - x_pos, y, 'green'))
+                # ZIELONE KROPKI (PÓŁKI) - SYMETRYCZNIE
+                otwory.append((x_front, y, 'green'))
+                otwory.append((D_MEBLA - x_front, y, 'green'))
     return otwory
 
 def otwory_montazowe_poziome(szer, gl):
     otw = []
     y_front = 37
     y_back = gl - 37
+    # NIEBIESKIE KROPKI (KONFIRMATY)
     otw.append((9, y_front, 'blue'))
     otw.append((9, y_back, 'blue'))
     otw.append((szer-9, y_front, 'blue'))
@@ -274,7 +286,7 @@ otw_W = otwory_montazowe_poziome(W_MEBLA, D_MEBLA)
 dodaj_element("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", "", otw_W, "L")
 dodaj_element("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", "", otw_W, "L")
 
-# Wypełnienie (Fronty i elementy wewnętrzne)
+# Wypełnienie
 for idx, k in enumerate(konfiguracja):
     if k['typ'] == "Szuflady" and k['ilosc'] > 0:
         h_f = (wys_wewnetrzna - ((k['ilosc'] + 1) * 3)) / k['ilosc']
@@ -357,23 +369,6 @@ with tabs[2]:
                     if el['w'] > 150: ax.text(el['x']+el['w']/2, el['y']+el['h']/2, el['id'], ha='center', fontsize=6, color='white')
                 ax.set_xlim(-50, 2850); ax.set_ylim(-50, 2150); ax.set_aspect('equal'); ax.axis('off')
                 st.pyplot(fig)
-
-        # 2. PŁYTA 16mm
-        p16 = [x for x in lista_elementow if "16mm" in x['Materiał']]
-        if p16:
-            st.markdown("---")
-            st.subheader(f"🟩 Płyta 16mm (Elementów: {len(p16)})")
-            if st.button("Oblicz 16mm"):
-                wyniki16 = optymalizuj_rozkroj(p16, 2800, 2070)
-                st.success(f"Potrzebne arkusze: {len(wyniki16)}")
-                for i, ark in enumerate(wyniki16):
-                    fig, ax = plt.subplots(figsize=(8, 5))
-                    ax.add_patch(patches.Rectangle((0,0), 2800, 2070, facecolor='#eee', edgecolor='black'))
-                    for el in ark['elementy']:
-                        ax.add_patch(patches.Rectangle((el['x'], el['y']), el['w'], el['h'], facecolor='#606c38', edgecolor='white'))
-                        if el['w'] > 150: ax.text(el['x']+el['w']/2, el['y']+el['h']/2, el['id'], ha='center', fontsize=6, color='white')
-                    ax.set_xlim(-50, 2850); ax.set_ylim(-50, 2150); ax.set_aspect('equal'); ax.axis('off')
-                    st.pyplot(fig)
 
 with tabs[3]:
     if GRAFIKA_DOSTEPNA:
