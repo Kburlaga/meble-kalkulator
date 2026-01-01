@@ -412,7 +412,9 @@ gen_konstrukcja()
 df = pd.DataFrame(lista_elementow)
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🎯 SZABLONY 1:1", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
-with tabs[0]: st.dataframe(df.drop(columns=['wiercenia', 'orientacja']), use_container_width=True)
+with tabs[0]: 
+    # POPRAWKA 2026: Zmieniono use_container_width=True na width="stretch"
+    st.dataframe(df.drop(columns=['wiercenia', 'orientacja']), width="stretch")
 
 with tabs[1]:
     if GRAFIKA_DOSTEPNA:
@@ -463,9 +465,3 @@ with tabs[3]:
         el_mat = [x for x in lista_elementow if x['Materiał'] == mat]
         if el_mat:
             st.caption(f"Materiał: {mat} ({len(el_mat)} szt.)")
-            area = sum(x['Szerokość [mm]']*x['Wysokość [mm]'] for x in el_mat) / 1000000
-            st.progress(min(area/5.7, 1.0), text=f"Szacowane zużycie: {area:.2f} m2")
-
-with tabs[4]:
-    if GRAFIKA_DOSTEPNA:
-        st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ilosc_przegrod, st.session_state['moduly_sekcji'], szer_jednej_wneki))
