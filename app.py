@@ -18,7 +18,7 @@ except ImportError:
     GRAFIKA_DOSTEPNA = False
 
 # ==========================================
-# 0. BAZY DANYCH (PRZYWRÓCONE!)
+# 0. BAZY DANYCH
 # ==========================================
 BAZA_SYSTEMOW = {
     "GTV Axis Pro": {"offset_prowadnica": 37.5, "offset_front_y": 47.5},
@@ -51,7 +51,7 @@ def init_state():
 
 init_state()
 
-# Skróty dla wygody
+# Skróty
 H_MEBLA = st.session_state['h_mebla']
 W_MEBLA = st.session_state['w_mebla']
 D_MEBLA = st.session_state['d_mebla']
@@ -61,7 +61,7 @@ ilosc_sekcji = ilosc_przegrod + 1
 KOD_PROJEKTU = st.session_state['kod_pro'].upper()
 
 # ==========================================
-# 2. LOGIKA MODUŁÓW (PEWNY ZAPIS)
+# 2. LOGIKA MODUŁÓW
 # ==========================================
 def usun_modul(nr_sekcji, idx):
     current_data = copy.deepcopy(st.session_state['moduly_sekcji'])
@@ -166,6 +166,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
     plt.close('all')
     fig, ax = plt.subplots(figsize=(12, 8))
 
+    # Obrys mebla
     ax.add_patch(patches.Rectangle((0, 0), w, h, linewidth=3, edgecolor='black', facecolor='none', zorder=5))
     ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
     ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
@@ -190,34 +191,42 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
             for mod in moduly:
                 h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
                 
-                ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_mod, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3, zorder=2))
+                # FIX: Przycięcie wizualne do obrysu wnętrza (żeby front nie wystawał)
+                # Obliczamy ile miejsca zostało do sufitu
+                space_left = (h - gr) - curr_y
+                # Rysujemy nie wyżej niż sufit
+                h_vis = min(h_mod, space_left) if space_left > 0 else 0
+                
+                # Ramka modułu (pomocnicza)
+                ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_vis, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3, zorder=2))
                 
                 det = mod['detale']
                 if mod['typ'] == "Szuflady":
                     n = det.get('ilosc', 2)
                     if n > 0:
-                        h_f = (h_mod - ((n-1)*3)) / n
+                        h_f = (h_vis - ((n-1)*3)) / n
                         for k in range(n):
                             yf = curr_y + k*(h_f+3)
+                            # Fronty szuflad - rysujemy używając h_vis (przyciętej)
                             ax.add_patch(patches.Rectangle((curr_x+2, yf), szer_wneki-4, h_f, facecolor='#f4e1d2', edgecolor='#669bbc', zorder=10))
                             ax.text(curr_x + szer_wneki/2, yf + h_f/2, "SZUFLADA", ha='center', va='center', fontsize=8, color='#004488', zorder=11, fontweight='bold')
 
                 elif mod['typ'] == "Półki":
                     n = det.get('ilosc', 1)
                     if n > 0:
-                        gap = h_mod / (n + 1)
+                        gap = h_vis / (n + 1)
                         for k in range(n):
                             yp = curr_y + (k+1)*gap
                             ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, gr, color='#8B4513', zorder=10))
 
                 elif mod['typ'] == "Drążek":
-                    ax.add_patch(patches.Rectangle((curr_x+5, curr_y + h_mod - 60), szer_wneki-10, 15, facecolor='silver', edgecolor='black', zorder=10))
-                    ax.text(curr_x + szer_wneki/2, curr_y + h_mod/2, "DRĄŻEK", ha='center', alpha=0.5, rotation=45, zorder=10)
+                    ax.add_patch(patches.Rectangle((curr_x+5, curr_y + h_vis - 60), szer_wneki-10, 15, facecolor='silver', edgecolor='black', zorder=10))
+                    ax.text(curr_x + szer_wneki/2, curr_y + h_vis/2, "DRĄŻEK", ha='center', alpha=0.5, rotation=45, zorder=10)
 
                 if det.get('drzwi'):
-                     ax.add_patch(patches.Rectangle((curr_x+1, curr_y+1), szer_wneki-2, h_mod-2, 
+                     ax.add_patch(patches.Rectangle((curr_x+1, curr_y+1), szer_wneki-2, h_vis-2, 
                                                   facecolor='green', alpha=0.1, edgecolor='green', linestyle='--', zorder=15))
-                     ax.text(curr_x + szer_wneki/2, curr_y + h_mod/2, "DRZWI", ha='center', color='green', fontweight='bold', alpha=0.8, zorder=16)
+                     ax.text(curr_x + szer_wneki/2, curr_y + h_vis/2, "DRZWI", ha='center', color='green', fontweight='bold', alpha=0.8, zorder=16)
 
                 curr_y += h_mod
 
