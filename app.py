@@ -3,7 +3,7 @@ import pandas as pd
 import io
 
 # Konfiguracja strony
-st.set_page_config(page_title="STOLARZPRO - V20.0", page_icon="🪚", layout="wide")
+st.set_page_config(page_title="STOLARZPRO - V20.1", page_icon="🪚", layout="wide")
 
 # Próba importu grafiki
 try:
@@ -31,7 +31,6 @@ BAZA_ZAWIASOW = {
 }
 
 def resetuj_projekt():
-    # Domyślne ustawienia
     defaults = {
         'kod_pro': "PROJEKT-1", 'h_mebla': 2000, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
         'il_przegrod': 2, 'typ_plecow': "Nakładane", 'sys_szuflad': "GTV Axis Pro", 
@@ -40,8 +39,7 @@ def resetuj_projekt():
     }
     for k, v in defaults.items(): st.session_state[k] = v
     
-    # NOWA STRUKTURA DANYCH: Słownik list modułów
-    # Klucz: numer sekcji (0, 1, 2...), Wartość: Lista modułów w tej sekcji
+    # Słownik list modułów: Klucz=nr_sekcji, Wartość=Lista modułów
     st.session_state['moduly_sekcji'] = {} 
     
     st.session_state['pdf_ready'] = None
@@ -60,7 +58,7 @@ def dodaj_modul(nr_sekcji, typ, wysokosc_typ, wysokosc_mm, detale):
         'typ': typ,
         'wys_mode': wysokosc_typ, # 'fixed' lub 'auto'
         'wys_mm': wysokosc_mm if wysokosc_typ == 'fixed' else 0,
-        'detale': detale # słownik z liczbą półek, szuflad, czy drzwi itp.
+        'detale': detale 
     }
     st.session_state['moduly_sekcji'][nr_sekcji].append(nowy_modul)
 
@@ -71,6 +69,7 @@ def usun_modul(nr_sekcji, idx):
 # ==========================================
 # 2. FUNKCJE RYSUNKOWE I SZABLONY
 # ==========================================
+# POPRAWIONA DEFINICJA
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3', orientacja_frontu="L"):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
@@ -100,8 +99,13 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], kolor_tla='#e6ccb3',
 
     if orientacja_frontu == 'L':
         ax.add_patch(patches.Rectangle((-3, 0), 3, wys, color='#d62828'))
+        ax.text(5, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=9, weight='bold')
     elif orientacja_frontu == 'D': 
         ax.add_patch(patches.Rectangle((0, -3), szer, 3, color='#d62828'))
+        ax.text(szer/2, 5, "FRONT", ha='center', color='#d62828', fontsize=9, weight='bold')
+    elif orientacja_frontu == 'P':
+        ax.add_patch(patches.Rectangle((szer, 0), 3, wys, color='#d62828'))
+        ax.text(szer-15, wys/2, "FRONT", rotation=90, color='#d62828', fontsize=9, weight='bold')
 
     ax.text(szer/2, -15, f"{szer} mm", ha='center', weight='bold')
     ax.text(-15, wys/2, f"{wys} mm", va='center', rotation=90, weight='bold')
@@ -157,22 +161,19 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
         # Rysowanie modułów w sekcji
         moduly = moduly_sekcji.get(i, [])
         if moduly:
-            # Obliczanie wysokości modułów
             fixed_h_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
             auto_count = sum(1 for m in moduly if m['wys_mode'] == 'auto')
             auto_h = (h_wew - fixed_h_sum) / auto_count if auto_count > 0 else 0
             
-            curr_y = gr # Start od dołu (nad wieńcem dolnym)
+            curr_y = gr 
             
             for mod in moduly:
                 h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
                 
-                # Rysowanie tła modułu
+                # Tło modułu
                 ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_mod, facecolor='none', edgecolor='black', linestyle=':', alpha=0.5))
                 
-                # Wypełnienie modułu
                 det = mod['detale']
-                
                 if mod['typ'] == "Szuflady":
                     n = det.get('ilosc', 2)
                     if n > 0:
@@ -211,7 +212,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
 # 3. INTERFEJS GŁÓWNY (SIDEBAR)
 # ==========================================
 with st.sidebar:
-    st.title("🪚 STOLARZPRO V20.0")
+    st.title("🪚 STOLARZPRO V20.1")
     if st.button("🗑️ NOWY PROJEKT", type="primary"): resetuj_projekt(); st.rerun()
     
     st.markdown("### 1. Gabaryty")
@@ -231,7 +232,6 @@ with st.sidebar:
     
     for i, tab in enumerate(tabs_sekcji):
         with tab:
-            # Wyświetlanie aktualnych modułów
             if i in st.session_state['moduly_sekcji'] and st.session_state['moduly_sekcji'][i]:
                 st.write("🔽 Dół szafy")
                 for idx, mod in enumerate(st.session_state['moduly_sekcji'][i]):
@@ -246,8 +246,6 @@ with st.sidebar:
                 st.write("🔼 Góra szafy")
                 st.markdown("---")
             
-            # Formularz dodawania
-            st.caption("Dodaj kolejny moduł (nad poprzednim):")
             c_typ, c_wys = st.columns([2, 1])
             new_typ = c_typ.selectbox("Typ", ["Półki", "Szuflady", "Drążek", "Pusta"], key=f"new_typ_{i}")
             wys_opt = c_wys.selectbox("Wysokość", ["Fixed (mm)", "AUTO (Reszta)"], key=f"wys_opt_{i}")
@@ -256,7 +254,6 @@ with st.sidebar:
             if wys_opt == "Fixed (mm)":
                 new_wys_mm = st.number_input("Ile mm?", 100, 2000, 600, key=f"h_mm_{i}")
             
-            # Detale
             detale = {'ilosc': 0, 'drzwi': False}
             if new_typ == "Szuflady":
                 detale['ilosc'] = st.number_input("Ile szuflad?", 1, 6, 2, key=f"det_sz_{i}")
@@ -301,12 +298,11 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     x_f = D_MEBLA - 37.0 if is_mirror else 37.0
     x_b = D_MEBLA - (37.0 + offset_2) if is_mirror else 37.0 + offset_2
     
-    # Obliczanie wysokości modułów AUTO
     fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
     auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
     h_auto = (wys_wewnetrzna - fixed_sum) / auto_cnt if auto_cnt > 0 else 0
     
-    curr_y = 0 # Start od dołu wewnątrz korpusu
+    curr_y = 0 
     
     for mod in moduly:
         h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
@@ -314,7 +310,6 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
         
         # DRZWI (Prowadniki)
         if det.get('drzwi'):
-            # Zawiasy 100mm od krawędzi modułu
             otwory.append((x_f, curr_y + 100, 'green'))
             otwory.append((x_f, curr_y + h_mod - 100, 'green'))
 
@@ -339,14 +334,13 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
         # DRĄŻEK
         elif mod['typ'] == "Drążek":
             y_dr = curr_y + h_mod - 60
-            otwory.append((D_MEBLA/2, y_dr, 'green')) # Środek boku
+            otwory.append((D_MEBLA/2, y_dr, 'green'))
 
         curr_y += h_mod
         
     return otwory
 
 def gen_konstrukcja():
-    # 1. Korpus Zewnętrzny
     boki_h = wys_wewnetrzna
     
     # Bok Lewy
@@ -366,14 +360,13 @@ def gen_konstrukcja():
     for i in range(ilosc_przegrod):
         mod_L = st.session_state['moduly_sekcji'].get(i, [])
         mod_R = st.session_state['moduly_sekcji'].get(i+1, [])
-        otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False) # Suma wierceń z obu stron
+        otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False) 
         dodaj_el(f"Przegroda {i+1}", D_MEBLA, boki_h, GR_PLYTY, "18mm KORPUS", otw, "L")
 
-    # 2. Wypełnienie Modułami
+    # Wypełnienie Modułami
     for i in range(ilosc_sekcji):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
         
-        # Oblicz auto
         fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
         auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
         h_auto = (wys_wewnetrzna - fixed_sum) / auto_cnt if auto_cnt > 0 else 0
@@ -391,7 +384,7 @@ def gen_konstrukcja():
                 dodaj_el(f"Drzwi Sekcja {i+1}", w_drzwi, h_drzwi, 18, "18mm FRONT", otw_drzwi, "L")
             
             # WNĘTRZE
-            is_inner = det.get('drzwi', False) # Czy szuflady są wewnętrzne?
+            is_inner = det.get('drzwi', False) 
             
             if mod['typ'] == "Szuflady":
                 n = det.get('ilosc', 2)
@@ -399,17 +392,17 @@ def gen_konstrukcja():
                 
                 mat_f = "18mm KORPUS" if is_inner else "18mm FRONT"
                 nazwa_f = "Front Szuflady Wew." if is_inner else "Front Szuflady"
-                w_f = szer_jednej_wneki - (10 if is_inner else 4) # Węższe jeśli wewnętrzne (luz na zawias)
+                w_f = szer_jednej_wneki - (10 if is_inner else 4) 
                 
                 for _ in range(n):
                     dodaj_el(nazwa_f, w_f, h_f, 18, mat_f, [], "D")
-                    dodaj_el("Dno Szuflady", w_f-71, 476, 3, "3mm HDF", [], "D") # HDF
-                    dodaj_el("Tył Szuflady", w_f-83, 150, 16, "16mm BIAŁA", [], "D") # 16mm
+                    dodaj_el("Dno Szuflady", w_f-71, 476, 3, "3mm HDF", [], "D")
+                    dodaj_el("Tył Szuflady", w_f-83, 150, 16, "16mm BIAŁA", [], "D")
 
             elif mod['typ'] == "Półki":
                 n = det.get('ilosc', 1)
                 w_p = szer_jednej_wneki - 2
-                if is_inner: w_p -= 10 # Cofnięta/węższa jeśli za drzwiami
+                if is_inner: w_p -= 10 
                 
                 otw_p = [(9, 37, 'blue'), (9, D_MEBLA-50, 'blue'), (w_p-9, 37, 'blue'), (w_p-9, D_MEBLA-50, 'blue')]
                 for _ in range(n):
@@ -432,7 +425,15 @@ with tabs[1]:
             buf = io.BytesIO()
             with PdfPages(buf) as pdf:
                 for el in lista_elementow:
-                    fig = rysuj_element(el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], el['wiercenia'], orientacja_frontu=el['orientacja'])
+                    # POPRAWKA argumentów
+                    fig = rysuj_element(
+                        el['Szerokość [mm]'], 
+                        el['Wysokość [mm]'], 
+                        el['ID'], 
+                        el['Nazwa'], 
+                        otwory=el['wiercenia'], 
+                        orientacja_frontu=el['orientacja']
+                    )
                     if fig: pdf.savefig(fig); plt.close(fig)
             st.session_state['pdf_ready'] = buf
         
@@ -441,7 +442,16 @@ with tabs[1]:
 
         sel = c2.selectbox("Wybierz element:", [e['ID'] for e in lista_elementow])
         it = next(x for x in lista_elementow if x['ID'] == sel)
-        st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['wiercenia'], it['orientacja']))
+        
+        # POPRAWKA argumentów
+        st.pyplot(rysuj_element(
+            it['Szerokość [mm]'], 
+            it['Wysokość [mm]'], 
+            it['ID'], 
+            it['Nazwa'], 
+            otwory=it['wiercenia'], 
+            orientacja_frontu=it['orientacja']
+        ))
 
 with tabs[2]:
     st.info("Szablony 1:1 do druku A4.")
