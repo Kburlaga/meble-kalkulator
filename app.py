@@ -31,24 +31,19 @@ BAZA_ZAWIASOW = {
 }
 
 def resetuj_projekt():
-    # Inicjalizacja domyślnych wartości
-    defaults = {
-        'kod_pro': "PROJEKT-1", 'h_mebla': 2000, 'w_mebla': 1800, 'd_mebla': 600, 'gr_plyty': 18,
-        'il_przegrod': 2, 'typ_plecow': "Nakładane", 'sys_szuflad': "GTV Axis Pro", 
-        'sys_zawiasow': "Blum Clip Top", 'typ_boku': "C",
-        'fuga': 3.0, 'arkusz_w': 2800, 'arkusz_h': 2070, 'rzaz': 4
-    }
-    for k, v in defaults.items(): 
-        if k not in st.session_state:
-            st.session_state[k] = v
+    # Domyślne wartości w sesji
+    if 'kod_pro' not in st.session_state: st.session_state['kod_pro'] = "PROJEKT-1"
+    if 'h_mebla' not in st.session_state: st.session_state['h_mebla'] = 2000
+    if 'w_mebla' not in st.session_state: st.session_state['w_mebla'] = 1800
+    if 'd_mebla' not in st.session_state: st.session_state['d_mebla'] = 600
+    if 'gr_plyty' not in st.session_state: st.session_state['gr_plyty'] = 18
+    if 'il_przegrod' not in st.session_state: st.session_state['il_przegrod'] = 2
     
-    # Kluczowe: Inicjalizacja listy modułów jako słownik
-    if 'moduly_sekcji' not in st.session_state:
-        st.session_state['moduly_sekcji'] = {} 
-    
+    # Reset kontenera na moduły
+    st.session_state['moduly_sekcji'] = {} 
     st.session_state['pdf_ready'] = None
 
-if 'kod_pro' not in st.session_state: resetuj_projekt()
+if 'moduly_sekcji' not in st.session_state: resetuj_projekt()
 
 # ==========================================
 # 1. LOGIKA MODUŁÓW (CRUD)
@@ -59,22 +54,26 @@ def usun_modul(nr_sekcji, idx):
         st.toast(f"Usunięto element z sekcji {nr_sekcji+1}")
 
 def dodaj_modul_do_bazy(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi):
-    # Logika zapisu
+    # Inicjalizacja listy dla sekcji, jeśli nie istnieje
     if nr_sekcji not in st.session_state['moduly_sekcji']:
         st.session_state['moduly_sekcji'][nr_sekcji] = []
     
     detale = {'ilosc': int(ilosc), 'drzwi': drzwi}
     
+    # Tworzenie obiektu modułu
     nowy_modul = {
         'typ': typ,
-        'wys_mode': 'auto' if tryb_wys == "AUTO (Reszta)" else 'fixed',
-        'wys_mm': float(wys_mm) if tryb_wys == "Fixed (mm)" else 0,
+        'wys_mode': 'auto' if "AUTO" in tryb_wys else 'fixed',
+        'wys_mm': float(wys_mm) if "Fixed" in tryb_wys else 0,
         'detale': detale 
     }
+    
+    # ZAPIS
     st.session_state['moduly_sekcji'][nr_sekcji].append(nowy_modul)
+    st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 2. RYSOWANIE (POPRAWIONE WARSTWY)
+# 2. RYSOWANIE (POPRAWIONE WARSTWY & KROPKI)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
     if not GRAFIKA_DOSTEPNA: return None
@@ -85,7 +84,7 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
     ax.add_patch(rect)
     
-    # Otwory (Duże i wyraźne)
+    # Otwory (Duże i na wierzchu)
     if otwory:
         for otw in otwory:
             x, y = otw[0], otw[1]
@@ -199,7 +198,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
                         gap = h_mod / (n + 1)
                         for k in range(n):
                             yp = curr_y + (k+1)*gap
-                            # Półka
+                            # Półka - wyraźna linia
                             ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, gr, color='#8B4513', zorder=10))
 
                 elif mod['typ'] == "Drążek":
@@ -224,25 +223,33 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
 # ==========================================
 with st.sidebar:
     st.title("🪚 STOLARZPRO V20.3")
+    
+    # Przycisk Reset - czyści tylko moduły
     if st.button("🗑️ NOWY PROJEKT", type="primary"): 
         st.session_state['moduly_sekcji'] = {}
         st.rerun()
     
     st.markdown("### 1. Gabaryty")
-    KOD_PROJEKTU = st.text_input("Nazwa", st.session_state['kod_pro']).upper()
+    
+    # Używamy kluczy (key) żeby Streamlit sam trzymał stan
+    st.text_input("Nazwa", key="kod_pro")
+    
     c1, c2 = st.columns(2)
+    c1.number_input("Wysokość", key="h_mebla")
+    c2.number_input("Szerokość", key="w_mebla")
+    c1.number_input("Głębokość", key="d_mebla")
+    c2.number_input("Grubość płyty", key="gr_plyty")
     
-    H_MEBLA = c1.number_input("Wysokość", value=st.session_state['h_mebla'], key='in_h')
-    W_MEBLA = c2.number_input("Szerokość", value=st.session_state['w_mebla'], key='in_w')
-    D_MEBLA = c1.number_input("Głębokość", value=st.session_state['d_mebla'], key='in_d')
-    GR_PLYTY = c2.number_input("Grubość płyty", value=st.session_state['gr_plyty'], key='in_gr')
+    st.number_input("Ilość przegród pionowych", min_value=0, key="il_przegrod")
     
-    # Aktualizacja stanu
-    st.session_state.update({'h_mebla': H_MEBLA, 'w_mebla': W_MEBLA, 'd_mebla': D_MEBLA, 'gr_plyty': GR_PLYTY})
-    
-    ilosc_przegrod = st.number_input("Ilość przegród pionowych", min_value=0, value=st.session_state['il_przegrod'], key='in_przeg')
-    st.session_state['il_przegrod'] = ilosc_przegrod
+    # Pobieramy aktualne wartości ze stanu do zmiennych dla obliczeń
+    H_MEBLA = st.session_state['h_mebla']
+    W_MEBLA = st.session_state['w_mebla']
+    D_MEBLA = st.session_state['d_mebla']
+    GR_PLYTY = st.session_state['gr_plyty']
+    ilosc_przegrod = st.session_state['il_przegrod']
     ilosc_sekcji = ilosc_przegrod + 1
+    KOD_PROJEKTU = st.session_state['kod_pro'].upper()
 
     st.markdown("### 2. Konfigurator Modułowy")
     st.info("Buduj sekcje od dołu do góry.")
@@ -251,7 +258,7 @@ with st.sidebar:
     
     for i, tab in enumerate(tabs_sekcji):
         with tab:
-            # Lista modułów (usuwanie poza formularzem)
+            # Lista modułów (usuwanie)
             if i in st.session_state['moduly_sekcji'] and st.session_state['moduly_sekcji'][i]:
                 st.write("🔽 Dół szafy")
                 for idx, mod in enumerate(st.session_state['moduly_sekcji'][i]):
@@ -266,7 +273,7 @@ with st.sidebar:
                 st.write("🔼 Góra szafy")
                 st.markdown("---")
             
-            # FORMULARZ DODAWANIA (KLUCZOWE - ZAPOBIEGA RESETOWANIU)
+            # FORMULARZ (To jest klucz do sukcesu!)
             with st.form(key=f"form_add_{i}"):
                 st.write("➕ Dodaj nowy moduł")
                 c_f1, c_f2 = st.columns(2)
@@ -277,6 +284,7 @@ with st.sidebar:
                 f_ilosc = st.number_input("Ilość (Szuflad/Półek)", 1, 10, 2)
                 f_drzwi = st.checkbox("Zamknij drzwiami?")
                 
+                # Przycisk wysyłający formularz
                 submit = st.form_submit_button("Dodaj Moduł")
                 
                 if submit:
@@ -370,7 +378,7 @@ def gen_konstrukcja():
     otw_P = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(ilosc_sekcji-1, []), True)
     dodaj_el("Bok Prawy", D_MEBLA, boki_h, GR_PLYTY, "18mm KORPUS", otw_P, "P")
     
-    # Wieńce
+    # Wieńce (Konfirmaty)
     otw_W = [(9, 37, 'blue'), (9, D_MEBLA-37, 'blue'), (W_MEBLA-9, 37, 'blue'), (W_MEBLA-9, D_MEBLA-37, 'blue')]
     dodaj_el("Wieniec Górny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", [], "L")
     dodaj_el("Wieniec Dolny", W_MEBLA, D_MEBLA, GR_PLYTY, "18mm KORPUS", [], "L")
@@ -383,7 +391,7 @@ def gen_konstrukcja():
         otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False) 
         dodaj_el(f"Przegroda {i+1}", D_MEBLA, boki_h, GR_PLYTY, "18mm KORPUS", otw, "L")
 
-    # Wypełnienie Modułami
+    # Wypełnienie Modułami (Formatki wewnętrzne)
     for i in range(ilosc_sekcji):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
         
