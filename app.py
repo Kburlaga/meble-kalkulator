@@ -89,7 +89,7 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi):
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (POPRAWIONE ODLEGŁOŚCI NAPISÓW)
+# 3. RYSOWANIE (POPRAWIONE ODLEGŁOŚCI - DUŻE ODSTĘPY)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
     if not GRAFIKA_DOSTEPNA: return None
@@ -118,8 +118,8 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             if len(otwory) < 50:
                 ax.text(x+5, y+5, f"({x:.0f},{y:.0f})", fontsize=7, alpha=0.7, zorder=21)
 
-    # Orientacja - FIX: Wsunięcie napisu "FRONT" głębiej (30px zamiast 10px)
-    offset_front = 30 
+    # Orientacja - FIX: Jeszcze głębiej wsunięty napis (60px)
+    offset_front = 60 
     
     if orientacja_frontu == 'L':
         ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='#d62828', zorder=5))
@@ -131,13 +131,13 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
         ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
         ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
 
-    # Wymiary - FIX: Odsunięcie wymiarów dalej od krawędzi (-70px zamiast -30px)
-    dist_dim = 70
+    # Wymiary - FIX: Bardzo duże odsunięcie (120px)
+    dist_dim = 120
     ax.text(szer/2, -dist_dim, f"{szer} mm", ha='center', weight='bold', fontsize=12)
     ax.text(-dist_dim, wys/2, f"{wys} mm", va='center', rotation=90, weight='bold', fontsize=12)
     
-    # Marginesy widoku - FIX: Zwiększone do 100px żeby napisy się mieściły
-    margin = 100
+    # Marginesy widoku - FIX: Zwiększone do 200px żeby wszystko weszło
+    margin = 200
     ax.set_xlim(-margin, szer + margin)
     ax.set_ylim(-margin, wys + margin)
     ax.set_aspect('equal'); ax.axis('off')
