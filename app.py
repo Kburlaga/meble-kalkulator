@@ -36,12 +36,12 @@ BAZA_ZAWIASOW = {
 # ==========================================
 def init_state():
     defaults = {
-        'kod_pro': "PROJEKT-1", 
+        'kod_pro': "SZAFA", 
         'h_mebla': 2000, 
-        'w_mebla': 1800, 
-        'd_mebla': 600, 
+        'w_mebla': 1000, 
+        'd_mebla': 500, 
         'gr_plyty': 18,
-        'il_przegrod': 2,
+        'il_przegrod': 0,
         'moduly_sekcji': {}, 
         'pdf_ready': None
     }
@@ -194,9 +194,14 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
             
             curr_y = gr 
             
-            for mod in moduly:
-                h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
+            for idx, mod in enumerate(moduly):
+                # FIX: AUTOMATYCZNY WIENIEC ŚRODKOWY MIĘDZY MODUŁAMI
+                if idx > 0:
+                    # Rysujemy wieniec środkowy
+                    ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, gr, facecolor='#d7ba9d', edgecolor='black', zorder=15))
+                    curr_y += gr # Przesuwamy kursor w górę o grubość płyty
                 
+                h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
                 space_left = (h - gr) - curr_y
                 h_vis = min(h_mod, space_left) if space_left > 0 else 0
                 
@@ -360,7 +365,14 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     
     curr_y = 0 
     
-    for mod in moduly:
+    for idx, mod in enumerate(moduly):
+        # FIX: AUTOMATYCZNY WIENIEC ŚRODKOWY (WIERCENIA)
+        if idx > 0:
+            # Wiercimy konfirmaty na wieniec środkowy
+            otwory.append((x_f, curr_y + gr_plyty_val/2, 'blue'))
+            otwory.append((d_mebla_val - 50, curr_y + gr_plyty_val/2, 'blue'))
+            curr_y += gr_plyty_val # Przesuwamy się o wieniec
+            
         h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
         det = mod['detale']
         
@@ -418,11 +430,20 @@ def gen_konstrukcja():
     for i in range(n_sekcji_val):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
         
+        # Obliczenie wysokości automatycznych
         fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
-        auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
-        h_auto = (wys_wewnetrzna - fixed_sum) / auto_cnt if auto_cnt > 0 else 0
+        # FIX: Odejmujemy grubości wieńców środkowych od dostępnego miejsca
+        ilosc_wiencow = max(0, len(moduly) - 1)
+        h_dostepne = wys_wewnetrzna - (ilosc_wiencow * gr_plyty_val)
         
-        for mod in moduly:
+        auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
+        h_auto = (h_dostepne - fixed_sum) / auto_cnt if auto_cnt > 0 else 0
+        
+        for idx, mod in enumerate(moduly):
+            # FIX: DODAWANIE FORMATKI WIEŃCA ŚRODKOWEGO
+            if idx > 0:
+                dodaj_el(f"Wieniec Środkowy (Sekcja {i+1})", szer_jednej_wneki, d_mebla_val, gr_plyty_val, "18mm KORPUS", [], "L")
+                
             h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
             det = mod['detale']
             
