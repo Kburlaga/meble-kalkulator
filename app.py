@@ -89,16 +89,18 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi):
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE
+# 3. RYSOWANIE (POPRAWIONE ODLEGŁOŚCI NAPISÓW)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
     fig, ax = plt.subplots(figsize=(10, 6))
     
+    # Tło
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
     ax.add_patch(rect)
     
+    # Otwory
     if otwory:
         for otw in otwory:
             x, y = otw[0], otw[1]
@@ -116,21 +118,28 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             if len(otwory) < 50:
                 ax.text(x+5, y+5, f"({x:.0f},{y:.0f})", fontsize=7, alpha=0.7, zorder=21)
 
+    # Orientacja - FIX: Wsunięcie napisu "FRONT" głębiej (30px zamiast 10px)
+    offset_front = 30 
+    
     if orientacja_frontu == 'L':
         ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='#d62828', zorder=5))
-        ax.text(10, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15)
+        ax.text(offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
     elif orientacja_frontu == 'D': 
         ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
-        ax.text(szer/2, 10, "FRONT", ha='center', color='#d62828', weight='bold', zorder=15)
+        ax.text(szer/2, offset_front, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
     elif orientacja_frontu == 'P':
         ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
-        ax.text(szer-20, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15)
+        ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
 
-    ax.text(szer/2, -30, f"{szer} mm", ha='center', weight='bold')
-    ax.text(-30, wys/2, f"{wys} mm", va='center', rotation=90, weight='bold')
+    # Wymiary - FIX: Odsunięcie wymiarów dalej od krawędzi (-70px zamiast -30px)
+    dist_dim = 70
+    ax.text(szer/2, -dist_dim, f"{szer} mm", ha='center', weight='bold', fontsize=12)
+    ax.text(-dist_dim, wys/2, f"{wys} mm", va='center', rotation=90, weight='bold', fontsize=12)
     
-    ax.set_xlim(-60, szer + 60)
-    ax.set_ylim(-60, wys + 60)
+    # Marginesy widoku - FIX: Zwiększone do 100px żeby napisy się mieściły
+    margin = 100
+    ax.set_xlim(-margin, szer + margin)
+    ax.set_ylim(-margin, wys + margin)
     ax.set_aspect('equal'); ax.axis('off')
     return fig
 
@@ -166,7 +175,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
     plt.close('all')
     fig, ax = plt.subplots(figsize=(12, 8))
 
-    # Obrys mebla
     ax.add_patch(patches.Rectangle((0, 0), w, h, linewidth=3, edgecolor='black', facecolor='none', zorder=5))
     ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
     ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
@@ -191,13 +199,9 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
             for mod in moduly:
                 h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
                 
-                # FIX: Przycięcie wizualne do obrysu wnętrza (żeby front nie wystawał)
-                # Obliczamy ile miejsca zostało do sufitu
                 space_left = (h - gr) - curr_y
-                # Rysujemy nie wyżej niż sufit
                 h_vis = min(h_mod, space_left) if space_left > 0 else 0
                 
-                # Ramka modułu (pomocnicza)
                 ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_vis, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3, zorder=2))
                 
                 det = mod['detale']
@@ -207,7 +211,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
                         h_f = (h_vis - ((n-1)*3)) / n
                         for k in range(n):
                             yf = curr_y + k*(h_f+3)
-                            # Fronty szuflad - rysujemy używając h_vis (przyciętej)
                             ax.add_patch(patches.Rectangle((curr_x+2, yf), szer_wneki-4, h_f, facecolor='#f4e1d2', edgecolor='#669bbc', zorder=10))
                             ax.text(curr_x + szer_wneki/2, yf + h_f/2, "SZUFLADA", ha='center', va='center', fontsize=8, color='#004488', zorder=11, fontweight='bold')
 
