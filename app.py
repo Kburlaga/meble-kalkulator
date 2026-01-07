@@ -18,17 +18,19 @@ except ImportError:
     GRAFIKA_DOSTEPNA = False
 
 # ==========================================
-# 0. BAZY DANYCH
+# 0. BAZY DANYCH (Czyste Integery)
 # ==========================================
 BAZA_SYSTEMOW = {
-    "GTV Axis Pro": {"offset_prowadnica": 37.5, "offset_front_y": 47.5},
-    "Blum Antaro": {"offset_prowadnica": 37.0, "offset_front_y": 45.5}
+    # Zmieniono 37.5 na 37 dla czystości
+    "GTV Axis Pro": {"offset_prowadnica": 37, "offset_front_y": 48},
+    "Blum Antaro": {"offset_prowadnica": 37, "offset_front_y": 46}
 }
 
 BAZA_ZAWIASOW = {
-    "Blum Clip Top": {"puszka_offset": 21.5}, 
-    "GTV Prestige": {"puszka_offset": 22.0},
-    "Hettich Sensys": {"puszka_offset": 22.5}
+    # Zaokrąglone do pełnych mm
+    "Blum Clip Top": {"puszka_offset": 22}, 
+    "GTV Prestige": {"puszka_offset": 22},
+    "Hettich Sensys": {"puszka_offset": 23}
 }
 
 # ==========================================
@@ -89,7 +91,7 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi):
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (POPRAWIONE ODLEGŁOŚCI - DUŻE ODSTĘPY)
+# 3. RYSOWANIE (CZYSTOŚĆ WARSZTATOWA)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
     if not GRAFIKA_DOSTEPNA: return None
@@ -100,44 +102,45 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
     ax.add_patch(rect)
     
-    # Otwory
+    # Otwory - CZYSTA WERSJA (Bez tekstów współrzędnych)
     if otwory:
         for otw in otwory:
             x, y = otw[0], otw[1]
             kolor_kod = otw[2] if len(otw) > 2 else 'red'
             
             if kolor_kod == 'blue': 
-                ax.add_patch(patches.Circle((x, y), radius=5, edgecolor='blue', facecolor='white', linewidth=1.5, zorder=20))
+                # Konfirmat - duże niebieskie kółko
+                ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='white', linewidth=2, zorder=20))
             elif kolor_kod == 'red': 
+                # Prowadnica - czerwona kropka
                 ax.add_patch(patches.Circle((x, y), radius=4, color='red', zorder=20))
-                if len(otwory) < 40: ax.text(x+6, y, "Prowadnica", fontsize=7, color='red', zorder=25)
             elif kolor_kod == 'green': 
+                # Zawias - zielone
                 r = 17.5 if "Front" in nazwa else 4
-                ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
+                ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=2, zorder=20))
             
-            if len(otwory) < 50:
-                ax.text(x+5, y+5, f"({x:.0f},{y:.0f})", fontsize=7, alpha=0.7, zorder=21)
+            # UWAGA: Usunięto ax.text z (x,y) żeby nie robić "misz maszu"
 
-    # Orientacja - FIX: Jeszcze głębiej wsunięty napis (60px)
+    # Orientacja
     offset_front = 60 
     
     if orientacja_frontu == 'L':
         ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='#d62828', zorder=5))
-        ax.text(offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
+        ax.text(offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=16)
     elif orientacja_frontu == 'D': 
         ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
-        ax.text(szer/2, offset_front, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
+        ax.text(szer/2, offset_front, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=16)
     elif orientacja_frontu == 'P':
         ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
-        ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
+        ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=16)
 
-    # Wymiary - FIX: Bardzo duże odsunięcie (120px)
-    dist_dim = 120
-    ax.text(szer/2, -dist_dim, f"{szer} mm", ha='center', weight='bold', fontsize=12)
-    ax.text(-dist_dim, wys/2, f"{wys} mm", va='center', rotation=90, weight='bold', fontsize=12)
+    # Wymiary - Formatowanie :.0f (bez przecinków)
+    dist_dim = 100
+    ax.text(szer/2, -dist_dim, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
+    ax.text(-dist_dim, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
     
-    # Marginesy widoku - FIX: Zwiększone do 200px żeby wszystko weszło
-    margin = 200
+    # Marginesy
+    margin = 150
     ax.set_xlim(-margin, szer + margin)
     ax.set_ylim(-margin, wys + margin)
     ax.set_aspect('equal'); ax.axis('off')
@@ -156,9 +159,14 @@ def generuj_szablon_a4(element, rog):
     for otw in otwory:
         x, y = otw[0], otw[1]
         kolor = otw[2] if len(otw) > 2 else 'black'
-        ax.plot([x-8, x+8], [y, y], color=kolor, linewidth=2, zorder=10)
-        ax.plot([x, x], [y-8, y+8], color=kolor, linewidth=2, zorder=10)
-        ax.text(x+4, y+4, f"({x:.1f}, {y:.1f})", fontsize=10, color=kolor, zorder=20)
+        
+        # Krzyżyk
+        s = 10 # rozmiar krzyżyka
+        ax.plot([x-s, x+s], [y, y], color=kolor, linewidth=1.5, zorder=10)
+        ax.plot([x, x], [y-s, y+s], color=kolor, linewidth=1.5, zorder=10)
+        
+        # Współrzędne - Tutaj są potrzebne, ale zaokrąglone!
+        ax.text(x+5, y+5, f"({x:.0f}, {y:.0f})", fontsize=9, color=kolor, zorder=20, weight='bold')
 
     a4_w, a4_h, m = 210, 297, 10
     
@@ -175,6 +183,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
     plt.close('all')
     fig, ax = plt.subplots(figsize=(12, 8))
 
+    # Obrys mebla
     ax.add_patch(patches.Rectangle((0, 0), w, h, linewidth=3, edgecolor='black', facecolor='none', zorder=5))
     ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
     ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
@@ -199,9 +208,11 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
             for mod in moduly:
                 h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
                 
+                # Bezpieczne rysowanie (żeby nie wychodziło poza obrys)
                 space_left = (h - gr) - curr_y
                 h_vis = min(h_mod, space_left) if space_left > 0 else 0
                 
+                # Tło modułu
                 ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_vis, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3, zorder=2))
                 
                 det = mod['detale']
@@ -211,6 +222,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
                         h_f = (h_vis - ((n-1)*3)) / n
                         for k in range(n):
                             yf = curr_y + k*(h_f+3)
+                            # Fronty
                             ax.add_patch(patches.Rectangle((curr_x+2, yf), szer_wneki-4, h_f, facecolor='#f4e1d2', edgecolor='#669bbc', zorder=10))
                             ax.text(curr_x + szer_wneki/2, yf + h_f/2, "SZUFLADA", ha='center', va='center', fontsize=8, color='#004488', zorder=11, fontweight='bold')
 
