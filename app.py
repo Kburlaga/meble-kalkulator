@@ -18,16 +18,14 @@ except ImportError:
     GRAFIKA_DOSTEPNA = False
 
 # ==========================================
-# 0. BAZY DANYCH (Czyste Integery)
+# 0. BAZY DANYCH
 # ==========================================
 BAZA_SYSTEMOW = {
-    # Zmieniono 37.5 na 37 dla czystości
     "GTV Axis Pro": {"offset_prowadnica": 37, "offset_front_y": 48},
     "Blum Antaro": {"offset_prowadnica": 37, "offset_front_y": 46}
 }
 
 BAZA_ZAWIASOW = {
-    # Zaokrąglone do pełnych mm
     "Blum Clip Top": {"puszka_offset": 22}, 
     "GTV Prestige": {"puszka_offset": 22},
     "Hettich Sensys": {"puszka_offset": 23}
@@ -38,12 +36,12 @@ BAZA_ZAWIASOW = {
 # ==========================================
 def init_state():
     defaults = {
-        'kod_pro': "PROJEKT-1", 
+        'kod_pro': "SZAFA", 
         'h_mebla': 2000, 
-        'w_mebla': 1800, 
-        'd_mebla': 600, 
+        'w_mebla': 1000, 
+        'd_mebla': 500, 
         'gr_plyty': 18,
-        'il_przegrod': 2,
+        'il_przegrod': 0, # Jedna sekcja = 0 przegród
         'moduly_sekcji': {}, 
         'pdf_ready': None
     }
@@ -60,7 +58,7 @@ D_MEBLA = st.session_state['d_mebla']
 GR_PLYTY = st.session_state['gr_plyty']
 ilosc_przegrod = st.session_state['il_przegrod']
 ilosc_sekcji = ilosc_przegrod + 1
-KOD_PROJEKTU = st.session_state['kod_pro'].upper()
+KOD_PROJEKTU = st.session_state['kod_pro'].upper().replace(" ", "_")
 
 # ==========================================
 # 2. LOGIKA MODUŁÓW
@@ -91,56 +89,54 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi):
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (CZYSTOŚĆ WARSZTATOWA)
+# 3. RYSOWANIE (Z PODPISAMI!)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(10, 7)) # Zwiększona wysokość dla tytułu
     
+    # TYTUŁ I ID (KLUCZOWA ZMIANA)
+    plt.title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=20, color='#333333')
+
     # Tło
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
     ax.add_patch(rect)
     
-    # Otwory - CZYSTA WERSJA (Bez tekstów współrzędnych)
+    # Otwory
     if otwory:
         for otw in otwory:
             x, y = otw[0], otw[1]
             kolor_kod = otw[2] if len(otw) > 2 else 'red'
             
             if kolor_kod == 'blue': 
-                # Konfirmat - duże niebieskie kółko
-                ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='white', linewidth=2, zorder=20))
+                ax.add_patch(patches.Circle((x, y), radius=5, edgecolor='blue', facecolor='white', linewidth=1.5, zorder=20))
             elif kolor_kod == 'red': 
-                # Prowadnica - czerwona kropka
                 ax.add_patch(patches.Circle((x, y), radius=4, color='red', zorder=20))
             elif kolor_kod == 'green': 
-                # Zawias - zielone
                 r = 17.5 if "Front" in nazwa else 4
-                ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=2, zorder=20))
-            
-            # UWAGA: Usunięto ax.text z (x,y) żeby nie robić "misz maszu"
+                ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
 
     # Orientacja
     offset_front = 60 
     
     if orientacja_frontu == 'L':
         ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='#d62828', zorder=5))
-        ax.text(offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=16)
+        ax.text(offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
     elif orientacja_frontu == 'D': 
         ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
-        ax.text(szer/2, offset_front, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=16)
+        ax.text(szer/2, offset_front, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
     elif orientacja_frontu == 'P':
         ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
-        ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=16)
+        ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
 
-    # Wymiary - Formatowanie :.0f (bez przecinków)
-    dist_dim = 100
-    ax.text(szer/2, -dist_dim, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
-    ax.text(-dist_dim, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
+    # Wymiary
+    dist_dim = 120
+    ax.text(szer/2, -dist_dim, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=12)
+    ax.text(-dist_dim, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=12)
     
     # Marginesy
-    margin = 150
+    margin = 200
     ax.set_xlim(-margin, szer + margin)
     ax.set_ylim(-margin, wys + margin)
     ax.set_aspect('equal'); ax.axis('off')
@@ -154,18 +150,17 @@ def generuj_szablon_a4(element, rog):
     szer, wys = element['Szerokość [mm]'], element['Wysokość [mm]']
     otwory = element['wiercenia']
     
+    # Tytuł na szablonie
+    plt.title(f"SZABLON: {element['ID']} ({rog})", fontsize=14, pad=10)
+
     ax.add_patch(patches.Rectangle((0, 0), szer, wys, linewidth=3, edgecolor='black', facecolor='#eee', zorder=1))
     
     for otw in otwory:
         x, y = otw[0], otw[1]
         kolor = otw[2] if len(otw) > 2 else 'black'
-        
-        # Krzyżyk
-        s = 10 # rozmiar krzyżyka
+        s = 10
         ax.plot([x-s, x+s], [y, y], color=kolor, linewidth=1.5, zorder=10)
         ax.plot([x, x], [y-s, y+s], color=kolor, linewidth=1.5, zorder=10)
-        
-        # Współrzędne - Tutaj są potrzebne, ale zaokrąglone!
         ax.text(x+5, y+5, f"({x:.0f}, {y:.0f})", fontsize=9, color=kolor, zorder=20, weight='bold')
 
     a4_w, a4_h, m = 210, 297, 10
@@ -208,11 +203,9 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
             for mod in moduly:
                 h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else auto_h
                 
-                # Bezpieczne rysowanie (żeby nie wychodziło poza obrys)
                 space_left = (h - gr) - curr_y
                 h_vis = min(h_mod, space_left) if space_left > 0 else 0
                 
-                # Tło modułu
                 ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_vis, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3, zorder=2))
                 
                 det = mod['detale']
@@ -222,7 +215,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
                         h_f = (h_vis - ((n-1)*3)) / n
                         for k in range(n):
                             yf = curr_y + k*(h_f+3)
-                            # Fronty
                             ax.add_patch(patches.Rectangle((curr_x+2, yf), szer_wneki-4, h_f, facecolor='#f4e1d2', edgecolor='#669bbc', zorder=10))
                             ax.text(curr_x + szer_wneki/2, yf + h_f/2, "SZUFLADA", ha='center', va='center', fontsize=8, color='#004488', zorder=11, fontweight='bold')
 
@@ -339,9 +331,28 @@ wys_wewnetrzna = h_mebla_val - (2 * gr_plyty_val)
 
 lista_elementow = []
 
+# LICZNIK ELEMENTÓW DLA UNIKALNYCH ID
+counts_dict = {}
+
+def get_unique_id(nazwa_baza):
+    # Logika czyszczenia nazw do ID: "Bok Lewy" -> "BOK"
+    key = nazwa_baza.upper()
+    if "BOK" in key: key = "BOK"
+    elif "WIENIEC" in key: key = "WIENIEC"
+    elif "PRZEGRODA" in key: key = "PRZEGRODA"
+    elif "FRONT" in key: key = "FRONT"
+    elif "PÓŁKA" in key: key = "POLKA"
+    elif "DRZWI" in key: key = "DRZWI"
+    elif "DNO" in key: key = "DNO"
+    elif "TYŁ" in key: key = "TYL"
+    else: key = key.replace(" ", "_")
+    
+    current = counts_dict.get(key, 0) + 1
+    counts_dict[key] = current
+    return f"{KOD_PROJEKTU}_{key}_{current}"
+
 def dodaj_el(nazwa, szer, wys, gr, mat="18mm KORPUS", wiercenia=[], ori="L"):
-    idx = len(lista_elementow) + 1
-    ident = f"{st.session_state['kod_pro']}-{idx}"
+    ident = get_unique_id(nazwa)
     lista_elementow.append({
         "ID": ident, "Nazwa": nazwa, "Szerokość [mm]": round(szer, 1), "Wysokość [mm]": round(wys, 1),
         "Grubość [mm]": gr, "Materiał": mat, "wiercenia": wiercenia, "orientacja": ori
@@ -393,6 +404,10 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     return otwory
 
 def gen_konstrukcja():
+    # Reset licznika nazw przed generowaniem
+    global counts_dict
+    counts_dict = {}
+    
     boki_h = wys_wewnetrzna
     
     otw_L = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(0, []), False)
