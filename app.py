@@ -36,12 +36,12 @@ BAZA_ZAWIASOW = {
 # ==========================================
 def init_state():
     defaults = {
-        'kod_pro': "SZAFA", 
+        'kod_pro': "PROJEKT-1", 
         'h_mebla': 2000, 
-        'w_mebla': 1000, 
-        'd_mebla': 500, 
+        'w_mebla': 1800, 
+        'd_mebla': 600, 
         'gr_plyty': 18,
-        'il_przegrod': 0, # Jedna sekcja = 0 przegród
+        'il_przegrod': 2,
         'moduly_sekcji': {}, 
         'pdf_ready': None
     }
@@ -89,21 +89,18 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi):
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (Z PODPISAMI!)
+# 3. RYSOWANIE
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
-    fig, ax = plt.subplots(figsize=(10, 7)) # Zwiększona wysokość dla tytułu
+    fig, ax = plt.subplots(figsize=(10, 7))
     
-    # TYTUŁ I ID (KLUCZOWA ZMIANA)
     plt.title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=20, color='#333333')
 
-    # Tło
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
     ax.add_patch(rect)
     
-    # Otwory
     if otwory:
         for otw in otwory:
             x, y = otw[0], otw[1]
@@ -117,7 +114,6 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
                 r = 17.5 if "Front" in nazwa else 4
                 ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
 
-    # Orientacja
     offset_front = 60 
     
     if orientacja_frontu == 'L':
@@ -130,12 +126,10 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
         ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
         ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
 
-    # Wymiary
     dist_dim = 120
     ax.text(szer/2, -dist_dim, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=12)
     ax.text(-dist_dim, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=12)
     
-    # Marginesy
     margin = 200
     ax.set_xlim(-margin, szer + margin)
     ax.set_ylim(-margin, wys + margin)
@@ -150,7 +144,6 @@ def generuj_szablon_a4(element, rog):
     szer, wys = element['Szerokość [mm]'], element['Wysokość [mm]']
     otwory = element['wiercenia']
     
-    # Tytuł na szablonie
     plt.title(f"SZABLON: {element['ID']} ({rog})", fontsize=14, pad=10)
 
     ax.add_patch(patches.Rectangle((0, 0), szer, wys, linewidth=3, edgecolor='black', facecolor='#eee', zorder=1))
@@ -177,8 +170,9 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
     fig, ax = plt.subplots(figsize=(12, 8))
+    
+    plt.title(f"WIZUALIZACJA: {KOD_PROJEKTU}", fontsize=18, weight='bold', pad=20)
 
-    # Obrys mebla
     ax.add_patch(patches.Rectangle((0, 0), w, h, linewidth=3, edgecolor='black', facecolor='none', zorder=5))
     ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
     ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black', zorder=5))
@@ -330,12 +324,9 @@ szer_jednej_wneki = szer_wew_total / n_sekcji_val if n_sekcji_val > 0 else 0
 wys_wewnetrzna = h_mebla_val - (2 * gr_plyty_val)
 
 lista_elementow = []
-
-# LICZNIK ELEMENTÓW DLA UNIKALNYCH ID
 counts_dict = {}
 
 def get_unique_id(nazwa_baza):
-    # Logika czyszczenia nazw do ID: "Bok Lewy" -> "BOK"
     key = nazwa_baza.upper()
     if "BOK" in key: key = "BOK"
     elif "WIENIEC" in key: key = "WIENIEC"
@@ -404,7 +395,6 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     return otwory
 
 def gen_konstrukcja():
-    # Reset licznika nazw przed generowaniem
     global counts_dict
     counts_dict = {}
     
@@ -533,4 +523,20 @@ with tabs[3]:
 
 with tabs[4]:
     if GRAFIKA_DOSTEPNA:
-        st.pyplot(rysuj_podglad_mebla(w_mebla_val, h_mebla_val, gr_plyty_val, ilosc_przegrod, st.session_state['moduly_sekcji'], szer_jednej_wneki))
+        fig_vis = rysuj_podglad_mebla(w_mebla_val, h_mebla_val, gr_plyty_val, ilosc_przegrod, st.session_state['moduly_sekcji'], szer_jednej_wneki)
+        st.pyplot(fig_vis)
+        
+        buf_vis = io.BytesIO()
+        orient = 'landscape' if w_mebla_val > h_mebla_val else 'portrait'
+        paper_size = (11.69, 8.27) if orient == 'landscape' else (8.27, 11.69)
+        
+        fig_vis.set_size_inches(paper_size)
+        with PdfPages(buf_vis) as pdf:
+            pdf.savefig(fig_vis, orientation=orient, bbox_inches='tight')
+        
+        st.download_button(
+            label="📄 Pobierz Wizualizację (PDF A4)",
+            data=buf_vis.getvalue(),
+            file_name=f"WIZUALIZACJA_{KOD_PROJEKTU}.pdf",
+            mime="application/pdf"
+        )
