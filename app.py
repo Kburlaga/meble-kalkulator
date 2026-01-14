@@ -100,10 +100,11 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
 # ==========================================
 # 3. RYSOWANIE
 # ==========================================
-def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3'):
+# FIX: Dodano parametr figsize do sterowania rozmiarem obrazka (A4 vs Ekran)
+def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
-    fig, ax = plt.subplots(figsize=(10, 7))
+    fig, ax = plt.subplots(figsize=figsize)
     
     if "HDF" in nazwa: kolor_tla = '#d9d9d9'
     
@@ -377,7 +378,6 @@ def get_unique_id(nazwa_baza):
     counts_dict[key] = current
     return f"{KOD_PROJEKTU}_{key}_{current}"
 
-# Funkcja pomocnicza: Określanie oklejania na podstawie nazwy
 def opisz_oklejanie(nazwa):
     n = nazwa.upper()
     if "FRONT" in n or "DRZWI" in n:
@@ -385,7 +385,6 @@ def opisz_oklejanie(nazwa):
     elif "WIENIEC" in n or "PÓŁKA" in n or "PRZEGRODA" in n:
         return "1 Długa (Przód)"
     elif "BOK" in n:
-        # FIX: Zmiana na 3 krawędzie dla boków
         return "1 Długa + 2 Krótkie (Przód+Góra+Dół)"
     elif "DNO" in n or "TYŁ" in n or "PLECY" in n:
         return "Brak"
@@ -409,39 +408,26 @@ def dodaj_el(nazwa, szer, wys, gr, mat="18mm KORPUS", wiercenia=[], ori="L"):
 def gen_wiercenia_boku(moduly, is_mirror=False):
     otwory = []
     
-    # 1. FIX: ODWRÓCENIE WSPÓŁRZĘDNYCH DLA LUSTRZANEGO ODBICIA (BOK PRAWY)
     if is_mirror:
-        # Prawy bok: Front jest na X = Głębokość (d_mebla_val)
-        # Otwory 37mm od frontu lądują na d_mebla - 37
         x_f = d_mebla_val - 37.0
-        x_b = d_mebla_val - (37.0 + 224.0) # Druga dziura prowadnicy
-        # Plecy wpuszczane są na X = 0 (tył mebla)
+        x_b = d_mebla_val - (37.0 + 224.0)
         x_plecy_ref = gr_plecow / 2
     else:
-        # Lewy bok: Front jest na X = 0
-        # Otwory 37mm od frontu lądują na 37
         x_f = 37.0
         x_b = 37.0 + 224.0
-        # Plecy wpuszczane są na X = Głębokość (tył mebla)
         x_plecy_ref = d_mebla_val - (gr_plecow / 2)
 
-    # 2. Wiercenia Konstrukcyjne (Wieńce)
     if "Wpuszczane" in typ_konstr_val:
-        # Otwory na wieńce są z przodu (x_f) i z tyłu (symetrycznie)
-        # Ale uwaga: Dla Boku Prawego x_f jest przy froncie (wysokie X).
-        # Musimy zdefiniować "tył" dla wieńców
-        
         if is_mirror:
-            x_wieniec_tyl = 50.0 # Blisko X=0
+            x_wieniec_tyl = 50.0 
         else:
-            x_wieniec_tyl = d_mebla_val - 50.0 # Blisko X=Max
+            x_wieniec_tyl = d_mebla_val - 50.0
             
         otwory.append((x_f, gr_plyty_val/2, 'blue'))
         otwory.append((x_wieniec_tyl, gr_plyty_val/2, 'blue'))
         otwory.append((x_f, h_mebla_val - gr_plyty_val/2, 'blue'))
         otwory.append((x_wieniec_tyl, h_mebla_val - gr_plyty_val/2, 'blue'))
 
-    # 3. Wiercenia pod Plecy
     if "18mm" in typ_plecow_val or "16mm" in typ_plecow_val:
         ilosc_otw_plecy = int(h_mebla_val / 400) + 1
         step_plecy = (h_mebla_val - 100) / ilosc_otw_plecy
@@ -462,7 +448,6 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     for idx, mod in enumerate(moduly):
         if idx > 0:
             y_wieniec = curr_y + gr_plyty_val/2
-            # Wieniec środkowy też potrzebuje dwóch punktów (przód/tył)
             if is_mirror: x_wt = 50.0
             else: x_wt = d_mebla_val - 50.0
             
@@ -494,21 +479,14 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
                 for k in range(n):
                     y_p = curr_y + (k+1)*gap
                     
-                    # Definicja "głębokości" drugiego otworu
                     if is_fixed:
-                        if is_mirror: x_back_hole = 50.0 # Dla prawego boku tył jest przy 0
-                        else: x_back_hole = d_mebla_val - 50.0 # Dla lewego boku tył jest przy max
+                        if is_mirror: x_back_hole = 50.0 
+                        else: x_back_hole = d_mebla_val - 50.0 
                         
                         otwory.append((x_f, y_p, 'blue'))
                         otwory.append((x_back_hole, y_p, 'blue'))
                     else:
-                        # Półka ruchoma (zawsze cofnięta)
-                        # Tu się trochę komplikuje przy lustrze, bo głębokość jest względna
-                        # Uproszczenie: Półka zawsze ma te same kołki
-                        # X przedni: x_f (dla prawego to jest szer-37)
-                        # X tylny: szer - 50 (dla lewego) LUB 50 (dla prawego?)
-                        
-                        if is_mirror: x_back_hole = 50.0 # Tył półki
+                        if is_mirror: x_back_hole = 50.0 
                         else: x_back_hole = (d_mebla_val - gr_plecow) - 50.0
                         
                         otwory.append((x_f, y_p, 'green'))
@@ -608,7 +586,6 @@ df = pd.DataFrame(lista_elementow)
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🎯 SZABLONY 1:1", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
-    # Eksport CSV z polskimi znakami
     csv = df.drop(columns=['wiercenia', 'orientacja']).to_csv(index=False).encode('utf-8-sig')
     
     st.download_button(
@@ -629,16 +606,26 @@ with tabs[1]:
             with PdfPages(buf) as pdf:
                 for el in lista_elementow:
                     plt.clf()
+                    
+                    # FIX: INTELIGENTNA ORIENTACJA STRONY PDF
+                    if el['Szerokość [mm]'] > el['Wysokość [mm]']:
+                        fs = (11.69, 8.27) # Landscape
+                        orient = 'landscape'
+                    else:
+                        fs = (8.27, 11.69) # Portrait
+                        orient = 'portrait'
+                        
                     fig = rysuj_element(
                         szer=el['Szerokość [mm]'], 
                         wys=el['Wysokość [mm]'], 
                         id_elementu=el['ID'], 
                         nazwa=el['Nazwa'], 
                         otwory=el['wiercenia'], 
-                        orientacja_frontu=el['orientacja']
+                        orientacja_frontu=el['orientacja'],
+                        figsize=fs # Przekazujemy rozmiar A4
                     )
                     if fig: 
-                        pdf.savefig(fig)
+                        pdf.savefig(fig, orientation=orient)
                         plt.close(fig) 
             st.session_state['pdf_ready'] = buf
         
@@ -648,6 +635,7 @@ with tabs[1]:
         sel = c2.selectbox("Wybierz element:", [e['ID'] for e in lista_elementow])
         it = next(x for x in lista_elementow if x['ID'] == sel)
         
+        # Na ekranie rysujemy standardowo (kwadratowo)
         st.pyplot(rysuj_element(
             szer=it['Szerokość [mm]'], 
             wys=it['Wysokość [mm]'], 
