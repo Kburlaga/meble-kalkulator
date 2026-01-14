@@ -114,26 +114,20 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (MAPA + TABELA)
+# 3. RYSOWANIE (LAYOUT OPTYMALIZOWANY)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
     
-    # Jeśli są otwory, dzielimy widok na rysunek (góra) i tabelę (dół)
-    if otwory:
-        fig = plt.figure(figsize=figsize)
-        # Grid: 2 wiersze. Górny (rys) ma wagę 3, Dolny (tabela) ma wagę 1 (lub więcej w zależności od liczby otworów)
-        height_ratios = [3, 1]
-        gs = fig.add_gridspec(2, 1, height_ratios=height_ratios)
-        ax = fig.add_subplot(gs[0])
-        ax_tab = fig.add_subplot(gs[1])
-        ax_tab.axis('off')
-    else:
-        fig, ax = plt.subplots(figsize=figsize)
-
+    # Wykrywanie orientacji na podstawie figsize (dla wydruku) lub domyślne dla ekranu
+    is_landscape = figsize[0] > figsize[1]
+    
+    fig, ax = plt.subplots(figsize=figsize)
+    
     if "HDF" in nazwa: kolor_tla = '#d9d9d9'
     
-    ax.set_title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=20, color='#333333')
+    # Tytuł zawsze na górze
+    ax.set_title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=15, color='#333333')
 
     # Rysunek płyty
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
@@ -142,7 +136,6 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     table_data = []
     
     if otwory:
-        # Sortowanie otworów po Y, potem po X dla czytelności numeracji
         otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
         
         for i, otw in enumerate(otwory_sorted):
@@ -150,42 +143,64 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             kolor_kod = otw[2] if len(otw) > 2 else 'red'
             nr = i + 1
             
-            typ_otworu = "Nieznany"
-            styl_kolo = {}
-            
+            typ_otworu = "Inny"
             if kolor_kod == 'blue': 
-                typ_otworu = "Konfirmat (Konstr.)"
+                typ_otworu = "Konfirmat"
                 ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='white', linewidth=2, zorder=20))
-                # Krzyżyk
-                ax.plot([x-3, x+3], [y, y], color='blue', linewidth=1)
-                ax.plot([x, x], [y-3, y+3], color='blue', linewidth=1)
-                
+                ax.plot([x-3, x+3], [y, y], color='blue', linewidth=1); ax.plot([x, x], [y-3, y+3], color='blue', linewidth=1)
             elif kolor_kod == 'red': 
                 typ_otworu = "Prowadnica"
                 ax.add_patch(patches.Circle((x, y), radius=4, color='red', zorder=20))
-                
             elif kolor_kod == 'green': 
-                typ_otworu = "Zawias/Półka"
+                typ_otworu = "Podpórka/Zawias"
                 r = 17.5 if "Front" in nazwa else 4
                 ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
 
-            # NUMERACJA (BADGE)
-            # Białe kółko z czarnym numerem
+            # Numer i Strzałki
             ax.add_patch(patches.Circle((x + 15, y + 15), radius=8, color='black', zorder=40))
             ax.text(x + 15, y + 15, str(nr), color='white', ha='center', va='center', fontsize=8, weight='bold', zorder=41)
             
-            # WSPÓŁRZĘDNE NA RYSUNKU (Subtelne)
-            ax.text(x + 15, y - 10, f"({x:.0f}, {y:.0f})", fontsize=7, color='#333333', zorder=30)
+            dist_x = x if x < szer/2 else szer - x
+            start_x = 0 if x < szer/2 else szer
+            arrow = patches.FancyArrowPatch((start_x, y), (x, y), arrowstyle='->', mutation_scale=10, color=kolor_kod, linewidth=0.8, zorder=30)
+            ax.add_patch(arrow)
+            text_x_pos = (start_x + x) / 2
+            ax.text(text_x_pos, y + 8, f"{dist_x:.0f}", ha='center', va='bottom', fontsize=8, color=kolor_kod, weight='bold', zorder=31)
             
-            # Dodanie do danych tabeli
+            offset_text_x = 15 if x < szer/2 else -15
+            align_text = 'left' if x < szer/2 else 'right'
+            ax.text(x + offset_text_x, y, f"Y: {y:.0f}", ha=align_text, va='center', fontsize=7, color='black', alpha=0.7, zorder=25)
+            
             table_data.append([str(nr), f"{x:.1f}", f"{y:.1f}", typ_otworu])
 
-        # RYSOWANIE TABELI POD WYKRESEM
-        col_labels = ["Nr", "X [mm]", "Y [mm]", "Typ Otworu"]
-        table = ax_tab.table(cellText=table_data, colLabels=col_labels, loc='center', cellLoc='center')
-        table.auto_set_font_size(False)
-        table.set_fontsize(9)
-        table.scale(1, 1.2) # Skalowanie wysokości wierszy
+        # --- LOGIKA POZYCJONOWANIA TABELI ---
+        if table_data:
+            col_labels = ["Nr", "X", "Y", "Typ"]
+            
+            if is_landscape:
+                # POZIOMA: Tabela pod rysunkiem, szeroka
+                # Adjust robi miejsce na dole
+                plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.25)
+                # Bbox: [left, bottom, width, height] w relacji do osi (która jest już skurczona przez adjust)
+                # Wpychamy tabelę w "margines" poniżej osi (-0.35)
+                bbox = [0.0, -0.35, 1.0, 0.25]
+            else:
+                # PIONOWA: Tabela w lewym dolnym rogu, węższa
+                plt.subplots_adjust(left=0.1, right=0.95, top=0.92, bottom=0.20)
+                # Bbox: Zaczynamy od lewej krawędzi (0), w dół (-0.25), bierzemy połowę szerokości (0.6)
+                bbox = [0.0, -0.28, 0.65, 0.20]
+
+            table = ax.table(cellText=table_data, colLabels=col_labels, loc='center', bbox=bbox, cellLoc='center')
+            table.auto_set_font_size(False)
+            table.set_fontsize(10) # WYMAGANIE: Czcionka 10
+            
+            # Pogrubienie nagłówków
+            for (row, col), cell in table.get_celld().items():
+                if row == 0: cell.set_text_props(weight='bold')
+
+    else:
+        # Brak otworów - maksymalny rysunek
+        plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05)
 
     # Orientacja
     offset_front = 60 
@@ -200,12 +215,11 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
             ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
 
-    # Główne wymiary formatki
-    dist_dim = 80
+    dist_dim = 120
     ax.text(szer/2, -dist_dim, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=12)
     ax.text(-dist_dim, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=12)
     
-    margin = 150
+    margin = 200
     ax.set_xlim(-margin, szer + margin)
     ax.set_ylim(-margin, wys + margin)
     ax.set_aspect('equal')
@@ -440,7 +454,6 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     otwory = []; x_f = 37.0 if not is_mirror else D_MEBLA - 37.0
     x_b = 37.0 + 224.0 if not is_mirror else D_MEBLA - (37.0 + 224.0)
     x_plecy_ref = D_MEBLA - (gr_plecow / 2) if not is_mirror else gr_plecow / 2
-    
     if "Wpuszczane" in TYP_KONSTRUKCJI:
         x_wt = 50.0 if is_mirror else D_MEBLA - 50.0
         otwory += [(x_f, GR_PLYTY/2, 'blue'), (x_wt, GR_PLYTY/2, 'blue'), (x_f, H_MEBLA-GR_PLYTY/2, 'blue'), (x_wt, H_MEBLA-GR_PLYTY/2, 'blue')]
