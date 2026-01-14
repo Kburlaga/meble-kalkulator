@@ -43,7 +43,7 @@ def init_state():
         'gr_plyty': 18,
         'il_przegrod': 0,
         'typ_konstrukcji': "Wieńce Wpuszczane",
-        'typ_plecow': "Płyta 18mm (Wpuszczana)",
+        'typ_plecow': "HDF 3mm (Nakładane)",
         'moduly_sekcji': {}, 
         'pdf_ready': None
     }
@@ -377,11 +377,33 @@ def get_unique_id(nazwa_baza):
     counts_dict[key] = current
     return f"{KOD_PROJEKTU}_{key}_{current}"
 
+# Funkcja pomocnicza: Określanie oklejania na podstawie nazwy
+def opisz_oklejanie(nazwa):
+    n = nazwa.upper()
+    if "FRONT" in n or "DRZWI" in n:
+        return "4 krawędzie (2mm)"
+    elif "WIENIEC" in n or "PÓŁKA" in n or "PRZEGRODA" in n:
+        return "1 Długa (Przód)"
+    elif "BOK" in n:
+        # FIX: Zmiana na 3 krawędzie dla boków
+        return "1 Długa + 2 Krótkie (Przód+Góra+Dół)"
+    elif "DNO" in n or "TYŁ" in n or "PLECY" in n:
+        return "Brak"
+    return "Wg uznania"
+
 def dodaj_el(nazwa, szer, wys, gr, mat="18mm KORPUS", wiercenia=[], ori="L"):
     ident = get_unique_id(nazwa)
+    oklejanie = opisz_oklejanie(nazwa)
     lista_elementow.append({
-        "ID": ident, "Nazwa": nazwa, "Szerokość [mm]": round(szer, 1), "Wysokość [mm]": round(wys, 1),
-        "Grubość [mm]": gr, "Materiał": mat, "wiercenia": wiercenia, "orientacja": ori
+        "ID": ident, 
+        "Nazwa": nazwa, 
+        "Szerokość [mm]": int(round(szer, 0)), 
+        "Wysokość [mm]": int(round(wys, 0)),
+        "Grubość [mm]": gr, 
+        "Materiał": mat, 
+        "Oklejanie": oklejanie,
+        "wiercenia": wiercenia, 
+        "orientacja": ori
     })
 
 def gen_wiercenia_boku(moduly, is_mirror=False):
@@ -389,23 +411,19 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     x_f = 37.0
     x_b = 37.0 + 224.0
     
-    # 1. Wiercenia Konstrukcyjne (Wieńce)
     if "Wpuszczane" in typ_konstr_val:
         otwory.append((x_f, gr_plyty_val/2, 'blue'))
         otwory.append((d_mebla_val - 50, gr_plyty_val/2, 'blue'))
         otwory.append((x_f, h_mebla_val - gr_plyty_val/2, 'blue'))
         otwory.append((d_mebla_val - 50, h_mebla_val - gr_plyty_val/2, 'blue'))
 
-    # 2. FIX: Wiercenia pod Plecy (jeśli płyta wpuszczana)
     if "18mm" in typ_plecow_val or "16mm" in typ_plecow_val:
-        x_plecy = d_mebla_val - (gr_plecow / 2) # Środek grubości pleców
-        # Rozmieszczamy co ~400mm
+        x_plecy = d_mebla_val - (gr_plecow / 2)
         ilosc_otw_plecy = int(h_mebla_val / 400) + 1
         step_plecy = (h_mebla_val - 100) / ilosc_otw_plecy
         
         for k in range(ilosc_otw_plecy + 1):
             y_plecy = 50 + k * step_plecy
-            # Unikamy kolizji z wieńcami
             if y_plecy > gr_plyty_val and y_plecy < (h_mebla_val - gr_plyty_val):
                 otwory.append((x_plecy, y_plecy, 'blue'))
 
@@ -487,7 +505,7 @@ def gen_konstrukcja():
         mod_L = st.session_state['moduly_sekcji'].get(i, [])
         mod_R = st.session_state['moduly_sekcji'].get(i+1, [])
         otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False) 
-        dodaj_el(f"Przegroda {i+1}", glebokosc_wewnetrzna, wys_wewnetrzna, gr_plyty_val, "18mm KORPUS", otw, "L")
+        dodaj_el(f"Przegroda {i+1}", d_mebla_val, wys_wewnetrzna, gr_plyty_val, "18mm KORPUS", otw, "L")
 
     for i in range(n_sekcji_val):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
@@ -549,6 +567,17 @@ df = pd.DataFrame(lista_elementow)
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🎯 SZABLONY 1:1", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
+    # Eksport CSV z polskimi znakami
+    csv = df.drop(columns=['wiercenia', 'orientacja']).to_csv(index=False).encode('utf-8-sig')
+    
+    st.download_button(
+        label="💾 Pobierz Listę do Stolarni (CSV)",
+        data=csv,
+        file_name=f"{KOD_PROJEKTU}_ROZKROJ.csv",
+        mime='text/csv',
+        key='download-csv'
+    )
+    
     st.dataframe(df.drop(columns=['wiercenia', 'orientacja']), width="stretch")
 
 with tabs[1]:
