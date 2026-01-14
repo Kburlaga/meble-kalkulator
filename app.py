@@ -98,9 +98,8 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE
+# 3. RYSOWANIE (WYMIAROWANIE STRZAŁKOWE)
 # ==========================================
-# FIX: Dodano parametr figsize do sterowania rozmiarem obrazka (A4 vs Ekran)
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     if not GRAFIKA_DOSTEPNA: return None
     plt.close('all')
@@ -118,17 +117,37 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             x, y = otw[0], otw[1]
             kolor_kod = otw[2] if len(otw) > 2 else 'red'
             
+            # Stylizacja otworów
             if kolor_kod == 'blue': 
                 ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='white', linewidth=2, zorder=20))
                 ax.plot([x-3, x+3], [y, y], color='blue', linewidth=1)
                 ax.plot([x, x], [y-3, y+3], color='blue', linewidth=1)
-                
             elif kolor_kod == 'red': 
                 ax.add_patch(patches.Circle((x, y), radius=4, color='red', zorder=20))
-                
             elif kolor_kod == 'green': 
                 r = 17.5 if "Front" in nazwa else 4
                 ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
+
+            # FIX: WYMIAROWANIE (STRZAŁKI I OPISY)
+            # 1. Wymiar X (Poziomy) - Strzałka od najbliższej krawędzi
+            dist_x = x if x < szer/2 else szer - x
+            start_x = 0 if x < szer/2 else szer
+            
+            # Rysowanie strzałki X
+            arrow = patches.FancyArrowPatch((start_x, y), (x, y), arrowstyle='->', mutation_scale=10, color=kolor_kod, linewidth=0.8, zorder=30)
+            ax.add_patch(arrow)
+            
+            # Tekst wymiaru X (na środku strzałki)
+            text_x_pos = (start_x + x) / 2
+            ax.text(text_x_pos, y + 8, f"{dist_x:.0f}", ha='center', va='bottom', fontsize=8, color=kolor_kod, weight='bold', zorder=31)
+
+            # 2. Wymiar Y (Pionowy) - Etykieta obok otworu
+            # Nie rysujemy strzałki od dołu (bo byłby bałagan), tylko etykietę "Y: ..."
+            # Przesuwamy tekst lekko w prawo/lewo żeby nie nachodził
+            offset_text_x = 15 if x < szer/2 else -15
+            align_text = 'left' if x < szer/2 else 'right'
+            
+            ax.text(x + offset_text_x, y, f"Y: {y:.0f}", ha=align_text, va='center', fontsize=7, color='black', alpha=0.7, zorder=25)
 
     offset_front = 60 
     
@@ -171,6 +190,8 @@ def generuj_szablon_a4(element, rog):
         s = 10
         ax.plot([x-s, x+s], [y, y], color=kolor, linewidth=1.5, zorder=10)
         ax.plot([x, x], [y-s, y+s], color=kolor, linewidth=1.5, zorder=10)
+        
+        # Wymiarowanie na szablonie
         ax.text(x+5, y+5, f"({x:.0f}, {y:.0f})", fontsize=9, color=kolor, zorder=20, weight='bold')
 
     a4_w, a4_h, m = 210, 297, 10
@@ -190,7 +211,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr
     
     plt.title(f"WIZUALIZACJA: {KOD_PROJEKTU}\n{typ_konstr}", fontsize=18, weight='bold', pad=20)
 
-    # Obrys mebla
     if "Wpuszczane" in typ_konstr:
         ax.add_patch(patches.Rectangle((0, 0), gr, h, facecolor='#d7ba9d', edgecolor='black', zorder=5))
         ax.add_patch(patches.Rectangle((w-gr, 0), gr, h, facecolor='#d7ba9d', edgecolor='black', zorder=5))
@@ -586,6 +606,7 @@ df = pd.DataFrame(lista_elementow)
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🎯 SZABLONY 1:1", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
+    # Eksport CSV z polskimi znakami
     csv = df.drop(columns=['wiercenia', 'orientacja']).to_csv(index=False).encode('utf-8-sig')
     
     st.download_button(
