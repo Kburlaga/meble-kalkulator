@@ -114,20 +114,21 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (LAYOUT OPTYMALIZOWANY)
+# 3. RYSOWANIE (MAPA + TABELA)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
     
-    # Wykrywanie orientacji na podstawie figsize (dla wydruku) lub domyślne dla ekranu
-    is_landscape = figsize[0] > figsize[1]
+    # Wykrywanie orientacji do wydruku (dla logiki tabeli)
+    is_landscape = szer > wys
     
+    # Jeśli podano figsize (np. A4), używamy go, w przeciwnym razie dynamiczny
     fig, ax = plt.subplots(figsize=figsize)
     
     if "HDF" in nazwa: kolor_tla = '#d9d9d9'
     
-    # Tytuł zawsze na górze
-    ax.set_title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=15, color='#333333')
+    # Tytuł
+    ax.set_title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=20, color='#333333')
 
     # Rysunek płyty
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
@@ -136,6 +137,7 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     table_data = []
     
     if otwory:
+        # Sortowanie otworów: Najpierw Y (wysokość), potem X
         otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
         
         for i, otw in enumerate(otwory_sorted):
@@ -143,7 +145,7 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             kolor_kod = otw[2] if len(otw) > 2 else 'red'
             nr = i + 1
             
-            typ_otworu = "Inny"
+            typ_otworu = "?"
             if kolor_kod == 'blue': 
                 typ_otworu = "Konfirmat"
                 ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='white', linewidth=2, zorder=20))
@@ -156,50 +158,41 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
                 r = 17.5 if "Front" in nazwa else 4
                 ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
 
-            # Numer i Strzałki
-            ax.add_patch(patches.Circle((x + 15, y + 15), radius=8, color='black', zorder=40))
-            ax.text(x + 15, y + 15, str(nr), color='white', ha='center', va='center', fontsize=8, weight='bold', zorder=41)
+            # NUMERACJA (BADGE) - CZYTELNE KÓŁKO Z NUMEREM
+            # Rysujemy obok punktu, żeby go nie zasłonić
+            ax.add_patch(patches.Circle((x + 12, y + 12), radius=9, color='black', zorder=40))
+            ax.text(x + 12, y + 12, str(nr), color='white', ha='center', va='center', fontsize=9, weight='bold', zorder=41)
             
-            dist_x = x if x < szer/2 else szer - x
-            start_x = 0 if x < szer/2 else szer
-            arrow = patches.FancyArrowPatch((start_x, y), (x, y), arrowstyle='->', mutation_scale=10, color=kolor_kod, linewidth=0.8, zorder=30)
-            ax.add_patch(arrow)
-            text_x_pos = (start_x + x) / 2
-            ax.text(text_x_pos, y + 8, f"{dist_x:.0f}", ha='center', va='bottom', fontsize=8, color=kolor_kod, weight='bold', zorder=31)
-            
-            offset_text_x = 15 if x < szer/2 else -15
-            align_text = 'left' if x < szer/2 else 'right'
-            ax.text(x + offset_text_x, y, f"Y: {y:.0f}", ha=align_text, va='center', fontsize=7, color='black', alpha=0.7, zorder=25)
-            
+            # Dodanie do danych tabeli
             table_data.append([str(nr), f"{x:.1f}", f"{y:.1f}", typ_otworu])
 
-        # --- LOGIKA POZYCJONOWANIA TABELI ---
+        # RYSOWANIE TABELI
         if table_data:
             col_labels = ["Nr", "X", "Y", "Typ"]
             
             if is_landscape:
                 # POZIOMA: Tabela pod rysunkiem, szeroka
-                # Adjust robi miejsce na dole
-                plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.25)
-                # Bbox: [left, bottom, width, height] w relacji do osi (która jest już skurczona przez adjust)
-                # Wpychamy tabelę w "margines" poniżej osi (-0.35)
-                bbox = [0.0, -0.35, 1.0, 0.25]
+                plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.30)
+                # bbox=[left, bottom, width, height] względem obszaru wykresu
+                bbox = [0.0, -0.40, 1.0, 0.30]
             else:
-                # PIONOWA: Tabela w lewym dolnym rogu, węższa
-                plt.subplots_adjust(left=0.1, right=0.95, top=0.92, bottom=0.20)
-                # Bbox: Zaczynamy od lewej krawędzi (0), w dół (-0.25), bierzemy połowę szerokości (0.6)
-                bbox = [0.0, -0.28, 0.65, 0.20]
+                # PIONOWA: Tabela w lewym dolnym rogu
+                plt.subplots_adjust(left=0.1, right=0.90, top=0.92, bottom=0.25)
+                # Umieszczamy tabelę nisko pod wykresem, wyrównaną do lewej
+                bbox = [0.0, -0.35, 0.6, 0.25]
 
             table = ax.table(cellText=table_data, colLabels=col_labels, loc='center', bbox=bbox, cellLoc='center')
             table.auto_set_font_size(False)
             table.set_fontsize(10) # WYMAGANIE: Czcionka 10
             
-            # Pogrubienie nagłówków
+            # Stylizacja nagłówków
             for (row, col), cell in table.get_celld().items():
-                if row == 0: cell.set_text_props(weight='bold')
+                if row == 0:
+                    cell.set_text_props(weight='bold')
+                    cell.set_facecolor('#f0f0f0')
 
     else:
-        # Brak otworów - maksymalny rysunek
+        # Brak otworów - maksymalizujemy rysunek
         plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05)
 
     # Orientacja
@@ -215,11 +208,13 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
             ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
 
-    dist_dim = 120
-    ax.text(szer/2, -dist_dim, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=12)
-    ax.text(-dist_dim, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=12)
+    # Główne wymiary formatki - Odsunięte daleko
+    dist_dim = 100
+    ax.text(szer/2, -dist_dim, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
+    ax.text(-dist_dim, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
     
-    margin = 200
+    # Marginesy - Duże, żeby pomieścić opisy
+    margin = 150
     ax.set_xlim(-margin, szer + margin)
     ax.set_ylim(-margin, wys + margin)
     ax.set_aspect('equal')
