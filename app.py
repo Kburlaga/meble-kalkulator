@@ -114,7 +114,7 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (MAPA + TABELA)
+# 3. RYSOWANIE (MAPA + TABELA ZOPTYMALIZOWANA)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
@@ -122,12 +122,10 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     # Wykrywanie orientacji do wydruku (dla logiki tabeli)
     is_landscape = szer > wys
     
-    # Jeśli podano figsize (np. A4), używamy go, w przeciwnym razie dynamiczny
     fig, ax = plt.subplots(figsize=figsize)
     
     if "HDF" in nazwa: kolor_tla = '#d9d9d9'
     
-    # Tytuł
     ax.set_title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=20, color='#333333')
 
     # Rysunek płyty
@@ -137,7 +135,6 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     table_data = []
     
     if otwory:
-        # Sortowanie otworów: Najpierw Y (wysokość), potem X
         otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
         
         for i, otw in enumerate(otwory_sorted):
@@ -158,44 +155,42 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
                 r = 17.5 if "Front" in nazwa else 4
                 ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
 
-            # NUMERACJA (BADGE) - CZYTELNE KÓŁKO Z NUMEREM
-            # Rysujemy obok punktu, żeby go nie zasłonić
+            # NUMERACJA (BADGE)
             ax.add_patch(patches.Circle((x + 12, y + 12), radius=9, color='black', zorder=40))
             ax.text(x + 12, y + 12, str(nr), color='white', ha='center', va='center', fontsize=9, weight='bold', zorder=41)
             
-            # Dodanie do danych tabeli
             table_data.append([str(nr), f"{x:.1f}", f"{y:.1f}", typ_otworu])
 
-        # RYSOWANIE TABELI
+        # RYSOWANIE TABELI (POPRAWIONE SZEROKOŚCI)
         if table_data:
             col_labels = ["Nr", "X", "Y", "Typ"]
+            
+            # Definiujemy proporcje kolumn (Nr, X, Y, Typ)
+            col_widths = [0.1, 0.25, 0.25, 0.4] 
             
             if is_landscape:
                 # POZIOMA: Tabela pod rysunkiem, szeroka
                 plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.30)
-                # bbox=[left, bottom, width, height] względem obszaru wykresu
+                # bbox=[left, bottom, width, height]
                 bbox = [0.0, -0.40, 1.0, 0.30]
             else:
-                # PIONOWA: Tabela w lewym dolnym rogu
-                plt.subplots_adjust(left=0.1, right=0.90, top=0.92, bottom=0.25)
-                # Umieszczamy tabelę nisko pod wykresem, wyrównaną do lewej
-                bbox = [0.0, -0.35, 0.6, 0.25]
+                # PIONOWA: Tabela pod rysunkiem, ale szersza niż poprzednio (0.9 zamiast 0.6)
+                plt.subplots_adjust(left=0.1, right=0.90, top=0.95, bottom=0.25)
+                # FIX: Szerokość 90% zamiast 60%, żeby tekst się mieścił
+                bbox = [0.0, -0.30, 0.9, 0.25]
 
-            table = ax.table(cellText=table_data, colLabels=col_labels, loc='center', bbox=bbox, cellLoc='center')
+            table = ax.table(cellText=table_data, colLabels=col_labels, loc='center', bbox=bbox, cellLoc='center', colWidths=col_widths)
             table.auto_set_font_size(False)
             table.set_fontsize(10) # WYMAGANIE: Czcionka 10
             
-            # Stylizacja nagłówków
             for (row, col), cell in table.get_celld().items():
                 if row == 0:
                     cell.set_text_props(weight='bold')
                     cell.set_facecolor('#f0f0f0')
 
     else:
-        # Brak otworów - maksymalizujemy rysunek
         plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05)
 
-    # Orientacja
     offset_front = 60 
     if "Plecy" not in nazwa:
         if orientacja_frontu == 'L':
@@ -208,12 +203,10 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
             ax.text(szer-offset_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
 
-    # Główne wymiary formatki - Odsunięte daleko
     dist_dim = 100
     ax.text(szer/2, -dist_dim, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
     ax.text(-dist_dim, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
     
-    # Marginesy - Duże, żeby pomieścić opisy
     margin = 150
     ax.set_xlim(-margin, szer + margin)
     ax.set_ylim(-margin, wys + margin)
