@@ -43,7 +43,7 @@ def init_state():
         'gr_plyty': 18,
         'il_przegrod': 0,
         'typ_konstrukcji': "Wieńce Wpuszczane",
-        'typ_plecow': "HDF 3mm (Nakładane)", # Domyślny typ
+        'typ_plecow': "Płyta 18mm (Wpuszczana)",
         'moduly_sekcji': {}, 
         'pdf_ready': None
     }
@@ -53,7 +53,7 @@ def init_state():
 
 init_state()
 
-# Skróty zmiennych (do odczytu)
+# Skróty
 H_MEBLA = st.session_state['h_mebla']
 W_MEBLA = st.session_state['w_mebla']
 D_MEBLA = st.session_state['d_mebla']
@@ -105,8 +105,7 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     plt.close('all')
     fig, ax = plt.subplots(figsize=(10, 7))
     
-    # Kolorystyka zależna od materiału
-    if "HDF" in nazwa: kolor_tla = '#d9d9d9' # Szary dla HDF
+    if "HDF" in nazwa: kolor_tla = '#d9d9d9'
     
     plt.title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=20, color='#333333')
 
@@ -132,7 +131,6 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
 
     offset_front = 60 
     
-    # Orientacja (Tylko jeśli to nie HDF/Plecy)
     if "Plecy" not in nazwa:
         if orientacja_frontu == 'L':
             ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='#d62828', zorder=5))
@@ -237,7 +235,6 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr
                             color_p = '#8B4513' if not det.get('fixed') else '#d7ba9d'
                             ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, gr, color=color_p, zorder=10))
 
-                # Ramka modułu
                 ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_vis, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3, zorder=2))
                 curr_y += h_mod
 
@@ -261,8 +258,6 @@ with st.sidebar:
     st.text_input("Nazwa", key="kod_pro")
     
     st.selectbox("Typ konstrukcji", ["Wieńce Nakładane", "Wieńce Wpuszczane"], key="typ_konstrukcji")
-    
-    # NOWOŚĆ: WYBÓR PLECÓW
     st.selectbox("Rodzaj Pleców", ["HDF 3mm (Nakładane)", "Płyta 18mm (Wpuszczana)", "Płyta 16mm (Wpuszczana)", "Brak"], key="typ_plecow")
     
     c1, c2 = st.columns(2)
@@ -342,7 +337,6 @@ typ_plecow_val = st.session_state.get('typ_plecow', "HDF 3mm (Nakładane)")
 n_przegrod_val = st.session_state['il_przegrod']
 n_sekcji_val = n_przegrod_val + 1
 
-# 1. Obliczenie Korpusu Zewnętrznego
 if "Wpuszczane" in typ_konstr_val:
     wys_boku = h_mebla_val
     szer_wienca = w_mebla_val - (2 * gr_plyty_val) - (n_przegrod_val * gr_plyty_val)
@@ -357,13 +351,10 @@ else:
 szer_jednej_wneki = szer_wew_total / n_sekcji_val if n_sekcji_val > 0 else 0
 wys_wewnetrzna = h_mebla_val - (2 * gr_plyty_val)
 
-# 2. Obliczenie Grubości Pleców (Zabieranej głębokości)
 gr_plecow = 0
 if "18mm" in typ_plecow_val: gr_plecow = 18
 elif "16mm" in typ_plecow_val: gr_plecow = 16
-# HDF nakładany nie zabiera głębokości wewnętrznej (montowany na zewnątrz)
 
-# Głębokość dostępna dla półek/szuflad
 glebokosc_wewnetrzna = d_mebla_val - gr_plecow
 
 lista_elementow = []
@@ -398,12 +389,25 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     x_f = 37.0
     x_b = 37.0 + 224.0
     
-    # Wiercenia Konstrukcyjne
+    # 1. Wiercenia Konstrukcyjne (Wieńce)
     if "Wpuszczane" in typ_konstr_val:
         otwory.append((x_f, gr_plyty_val/2, 'blue'))
         otwory.append((d_mebla_val - 50, gr_plyty_val/2, 'blue'))
         otwory.append((x_f, h_mebla_val - gr_plyty_val/2, 'blue'))
         otwory.append((d_mebla_val - 50, h_mebla_val - gr_plyty_val/2, 'blue'))
+
+    # 2. FIX: Wiercenia pod Plecy (jeśli płyta wpuszczana)
+    if "18mm" in typ_plecow_val or "16mm" in typ_plecow_val:
+        x_plecy = d_mebla_val - (gr_plecow / 2) # Środek grubości pleców
+        # Rozmieszczamy co ~400mm
+        ilosc_otw_plecy = int(h_mebla_val / 400) + 1
+        step_plecy = (h_mebla_val - 100) / ilosc_otw_plecy
+        
+        for k in range(ilosc_otw_plecy + 1):
+            y_plecy = 50 + k * step_plecy
+            # Unikamy kolizji z wieńcami
+            if y_plecy > gr_plyty_val and y_plecy < (h_mebla_val - gr_plyty_val):
+                otwory.append((x_plecy, y_plecy, 'blue'))
 
     fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
     ilosc_wiencow_sr = max(0, len(moduly) - 1)
@@ -443,7 +447,7 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
                 gap = h_mod / (n + 1)
                 for k in range(n):
                     y_p = curr_y + (k+1)*gap
-                    depth_drill = glebokosc_wewnetrzna if is_fixed else d_mebla_val # Konfirmat wchodzi w półkę
+                    depth_drill = glebokosc_wewnetrzna if is_fixed else d_mebla_val
                     if is_fixed:
                         otwory.append((x_f, y_p, 'blue'))
                         otwory.append((d_mebla_val - 50, y_p, 'blue'))
@@ -463,33 +467,28 @@ def gen_konstrukcja():
     global counts_dict
     counts_dict = {}
     
-    # 1. Plecy (Dodajemy jako pierwsze lub osobno)
     if "HDF" in typ_plecow_val:
         dodaj_el("Plecy (HDF)", w_mebla_val-4, h_mebla_val-4, 3, "3mm HDF", [], "X")
     elif "18mm" in typ_plecow_val:
-        # Plecy wpuszczane (między bokami, od góry do dołu wewnątrz wieńców wpuszczanych)
-        # Przyjmujemy: Szer = Szer wew korpusu, Wys = Wys wew korpusu
         dodaj_el("Plecy (Płyta)", szer_wew_total + (n_przegrod_val*gr_plyty_val), wys_wewnetrzna, 18, "18mm KORPUS", [], "X")
     elif "16mm" in typ_plecow_val:
         dodaj_el("Plecy (Płyta)", szer_wew_total + (n_przegrod_val*gr_plyty_val), wys_wewnetrzna, 16, "16mm BIAŁA", [], "X")
 
-    # 2. Korpus
     otw_L = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(0, []), False)
     dodaj_el("Bok Lewy", d_mebla_val, wys_boku, gr_plyty_val, "18mm KORPUS", otw_L, "L")
     
     otw_P = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(n_sekcji_val-1, []), True)
     dodaj_el("Bok Prawy", d_mebla_val, wys_boku, gr_plyty_val, "18mm KORPUS", otw_P, "P")
     
-    dodaj_el("Wieniec Górny", szer_wienca, d_mebla_val, gr_plyty_val, "18mm KORPUS", [], "L")
-    dodaj_el("Wieniec Dolny", szer_wienca, d_mebla_val, gr_plyty_val, "18mm KORPUS", [], "L")
+    dodaj_el("Wieniec Górny", szer_wienca, glebokosc_wewnetrzna, gr_plyty_val, "18mm KORPUS", [], "L")
+    dodaj_el("Wieniec Dolny", szer_wienca, glebokosc_wewnetrzna, gr_plyty_val, "18mm KORPUS", [], "L")
     
     for i in range(n_przegrod_val):
         mod_L = st.session_state['moduly_sekcji'].get(i, [])
         mod_R = st.session_state['moduly_sekcji'].get(i+1, [])
         otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False) 
-        dodaj_el(f"Przegroda {i+1}", d_mebla_val, wys_wewnetrzna, gr_plyty_val, "18mm KORPUS", otw, "L")
+        dodaj_el(f"Przegroda {i+1}", glebokosc_wewnetrzna, wys_wewnetrzna, gr_plyty_val, "18mm KORPUS", otw, "L")
 
-    # 3. Wypełnienie
     for i in range(n_sekcji_val):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
         
@@ -525,7 +524,6 @@ def gen_konstrukcja():
                 
                 for _ in range(n):
                     dodaj_el(nazwa_f, w_f, h_f, 18, mat_f, [], "D")
-                    # Dno i tył skrócone o głębokość pleców
                     dodaj_el("Dno Szuflady", w_f-71, 476, 3, "3mm HDF", [], "D")
                     dodaj_el("Tył Szuflady", w_f-83, 150, 16, "16mm BIAŁA", [], "D")
 
@@ -536,7 +534,6 @@ def gen_konstrukcja():
                 w_p = szer_jednej_wneki - luz
                 if is_inner and not is_fixed: w_p -= 10 
                 
-                # Głębokość półki: zawsze -20 od dostępnej głębokości (czyli D_MEBLA - GR_PLECOW - 20)
                 d_polki = glebokosc_wewnetrzna if is_fixed else (glebokosc_wewnetrzna - 20)
                 
                 for _ in range(n):
