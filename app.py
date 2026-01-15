@@ -31,8 +31,8 @@ BAZA_ZAWIASOW = {
 # ==========================================
 def init_state():
     defaults = {
-        'kod_pro': "SZAFKA_CARGO", # Zmieniona nazwa domyślna dla testu
-        'h_mebla': 720, 'w_mebla': 200, 'd_mebla': 500, 'gr_plyty': 18, # Domyślne wymiary Cargo
+        'kod_pro': "SZAFKA_CARGO", 
+        'h_mebla': 720, 'w_mebla': 200, 'd_mebla': 500, 'gr_plyty': 18,
         'il_przegrod': 0,
         'typ_konstrukcji': "Wieńce Wpuszczane",
         'typ_plecow': "HDF 3mm (Nakładane)",
@@ -166,12 +166,9 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     
     if "Plecy" not in nazwa:
         if is_poziomy:
-            # Dla wieńców/półek front jest ZAWSZE wzdłuż wymiaru 'szer' (który odpowiada szerokości szafki)
-            # Niezależnie czy to krótki czy długi bok.
             ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
             ax.text(szer/2, 20, "FRONT", ha='center', va='bottom', color='#d62828', weight='bold', zorder=15, fontsize=12)
         else:
-            # Boki / Fronty (Pionowe)
             if orientacja_frontu == 'L':
                 ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='#d62828', zorder=5))
                 ax.text(20, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=12)
@@ -226,7 +223,6 @@ def rysuj_tabele_strona(id_elementu, nazwa, otwory):
         col_labels = ["Nr", "X [mm]", "Y [mm]", "Typ Otworu"]
         col_widths = [0.1, 0.2, 0.2, 0.5]
         
-        # Tabela na całą szerokość
         table = ax.table(cellText=table_data, colLabels=col_labels, loc='top', bbox=[0.05, 0.05, 0.9, 0.85], cellLoc='center', colWidths=col_widths)
         table.auto_set_font_size(False)
         table.set_fontsize(10)
@@ -242,7 +238,9 @@ def rysuj_tabele_strona(id_elementu, nazwa, otwory):
         ax.text(0.5, 0.5, "Brak otworów.", ha='center')
     return fig
 
-# ... (rysuj_nesting, rysuj_arkusz, rysuj_podglad_mebla, generuj_szablon_a4 bez zmian) ...
+# ==========================================
+# FUNKCJE POMOCNICZE
+# ==========================================
 def rysuj_nesting(elementy, arkusz_w=2800, arkusz_h=2070, rzaz=4):
     elementy_sorted = sorted(elementy, key=lambda x: x['h'], reverse=True)
     sheets = []; current_sheet = {'w': arkusz_w, 'h': arkusz_h, 'placements': []}; shelf_x, shelf_y, shelf_h = 0, 0, 0
@@ -344,31 +342,60 @@ def get_unique_id(nazwa_baza):
     k = nazwa_baza.upper().replace(" ", "_"); c = counts_dict.get(k, 0) + 1; counts_dict[k] = c
     return f"{KOD_PROJEKTU}_{k}_{c}"
 
-# FIX: POPRAWIONA LOGIKA OKLEJANIA DLA CARGO
+# FIX: Logika Cargo (Sprawdzamy wymiary, nie tylko nazwę)
 def opisz_oklejanie(nazwa, szer_el, wys_el):
     n = nazwa.upper()
     if "FRONT" in n or "DRZWI" in n: return "4 krawędzie (2mm)"
     elif "WIENIEC" in n or "PÓŁKA" in n or "PRZEGRODA" in n:
-        # Porównujemy wymiary formatki, żeby określić czy front jest długi czy krótki
         if szer_el >= wys_el: return "1 Długa (Przód)"
-        else: return "1 Krótka (Przód)"
+        else: return "1 Krótka (Przód)" # Szafka Cargo
     elif "BOK" in n: return "1 Długa + 2 Krótkie (Przód+Góra+Dół)"
     return "Brak" if "DNO" in n or "TYŁ" in n or "PLECY" in n else "Wg uznania"
 
 def dodaj_el(nazwa, szer, wys, gr, mat, wiercenia, ori):
     ident = get_unique_id(nazwa)
-    # Przekazujemy wymiary do funkcji opisującej
     oklejanie = opisz_oklejanie(nazwa, szer, wys)
     lista_elementow.append({"ID": ident, "Nazwa": nazwa, "Szerokość [mm]": int(szer), "Wysokość [mm]": int(wys), "Grubość [mm]": gr, "Materiał": mat, "Oklejanie": oklejanie, "wiercenia": wiercenia, "orientacja": ori})
 
+# FIX: POPRAWIONE NAZWY ZMIENNYCH
 def gen_wiercenia_boku(moduly, is_mirror=False):
-    otwory = []; xf = 37.0 if not is_mirror else D_MEBLA-37.0; xb = 37.0+224.0 if not is_mirror else D_MEBLA-(37.0+224.0)
-    if "Wpuszczane" in TYP_KONSTRUKCJI: xw = 50.0 if is_mirror else D_MEBLA-50.0; otwory += [(xf, GR_PLYTY/2, 'blue'), (xw, GR_PLYTY/2, 'blue'), (xf, H_MEBLA-GR_PLYTY/2, 'blue'), (xw, H_MEBLA-GR_PLYTY/2, 'blue')]
-    curr_y = GR_PLYTY; ha = (wys_wewnetrzna)/max(1, len(moduly)) 
-    for m in moduly:
-        if m['typ'] == "Półki": 
-            for _ in range(m['detale']['ilosc']): yp = curr_y + ha/2; xb_p = 50.0 if is_mirror else D_MEBLA-50.0; otwory += [(xf, yp, 'green'), (xb_p, yp, 'green')]
-        curr_y += ha
+    otwory = []
+    # Poprawne nazwy
+    x_f = 37.0 if not is_mirror else D_MEBLA - 37.0
+    x_b = 37.0 + 224.0 if not is_mirror else D_MEBLA - (37.0 + 224.0)
+    x_plecy_ref = D_MEBLA - (gr_plecow / 2) if not is_mirror else gr_plecow / 2
+    
+    if "Wpuszczane" in TYP_KONSTRUKCJI:
+        x_wt = 50.0 if is_mirror else D_MEBLA - 50.0
+        otwory += [(x_f, GR_PLYTY/2, 'blue'), (x_wt, GR_PLYTY/2, 'blue'), (x_f, H_MEBLA-GR_PLYTY/2, 'blue'), (x_wt, H_MEBLA-GR_PLYTY/2, 'blue')]
+    
+    if gr_plecow > 0:
+        step = (H_MEBLA - 100) / (int(H_MEBLA/400)+1)
+        for k in range(int(H_MEBLA/400)+2):
+            yp = 50 + k*step
+            if yp > GR_PLYTY and yp < H_MEBLA-GR_PLYTY: otwory.append((x_plecy_ref, yp, 'blue'))
+            
+    curr_y = GR_PLYTY; h_auto = (wys_wewnetrzna - sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')) / max(1, len(moduly)) # Uproszczone max
+    
+    for idx, mod in enumerate(moduly):
+        h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
+        if idx > 0:
+            yw = curr_y+GR_PLYTY/2; xt = 50.0 if is_mirror else D_MEBLA-50.0
+            otwory += [(x_f, yw, 'blue'), (xt, yw, 'blue')]; curr_y += GR_PLYTY
+        
+        det = mod['detale']
+        if det.get('drzwi'): otwory += [(x_f, curr_y+100, 'green'), (x_f, curr_y+h_mod-100, 'green')]
+        
+        if mod['typ'] == "Szuflady":
+            n = det.get('ilosc', 2); h_f = (h_mod - ((n-1)*3))/n
+            for k in range(n): ys = curr_y + k*(h_f+3) + 3 + 37; otwory += [(x_f, ys, 'red'), (x_b, ys, 'red')]
+        elif mod['typ'] == "Półki":
+            n = det.get('ilosc', 1); gap = h_mod/(n+1)
+            for k in range(n):
+                yp = curr_y + (k+1)*gap; xb = 50.0 if is_mirror else D_MEBLA-50.0
+                if det.get('fixed'): otwory += [(x_f, yp, 'blue'), (xb, yp, 'blue')]
+                else: otwory += [(x_f, yp, 'green'), (xb if det.get('fixed') else (xb-gr_plecow if not is_mirror else 50.0), yp, 'green')]
+        curr_y += h_mod
     return otwory
 
 gen_konstrukcja()
