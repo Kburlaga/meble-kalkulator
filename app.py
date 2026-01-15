@@ -195,26 +195,21 @@ with st.sidebar:
     zaw_k = c_s2.selectbox("Zawiasy", list(BAZA_ZAWIASOW.keys()))
 
 # ==========================================
-# 4. OBLICZENIA ZMIENNYCH GLOBALNYCH
+# 5. SILNIK OBLICZENIOWY
 # ==========================================
-# (Obliczamy to ZANIM wywołamy funkcje generujące, aby uniknąć NameError)
-params_szuflad = BAZA_SYSTEMOW[sys_k]
-params_zawias = BAZA_ZAWIASOW[zaw_k]
-H_MEBLA = st.session_state['h_mebla']
-W_MEBLA = st.session_state['w_mebla']
-D_MEBLA = st.session_state['d_mebla']
-GR_PLYTY = st.session_state['gr_plyty']
+params_szuflad = BAZA_SYSTEMOW[sys_k]; params_zawias = BAZA_ZAWIASOW[zaw_k]
+H_MEBLA = st.session_state['h_mebla']; W_MEBLA = st.session_state['w_mebla']
+D_MEBLA = st.session_state['d_mebla']; GR_PLYTY = st.session_state['gr_plyty']
 TYP_KONSTRUKCJI = st.session_state.get('typ_konstrukcji', "Wieńce Nakładane")
 TYP_PLECOW = st.session_state.get('typ_plecow', "HDF 3mm (Nakładane)")
-ilosc_przegrod = st.session_state['il_przegrod']
-n_sekcji_val = ilosc_przegrod + 1
+ilosc_przegrod = st.session_state['il_przegrod']; n_sekcji_val = ilosc_przegrod + 1
 KOD_PROJEKTU = st.session_state['kod_pro'].upper().replace(" ", "_")
 
+# Logika wymiarów
 if "Wpuszczane" in TYP_KONSTRUKCJI:
     wys_boku = H_MEBLA
     szer_wienca = W_MEBLA - (2 * GR_PLYTY) - (ilosc_przegrod * GR_PLYTY)
-    if ilosc_przegrod > 0:
-        szer_wienca = W_MEBLA - (2 * GR_PLYTY) 
+    if ilosc_przegrod > 0: szer_wienca = W_MEBLA - (2 * GR_PLYTY) 
     szer_wew_total = szer_wienca - (ilosc_przegrod * GR_PLYTY)
 else:
     wys_boku = H_MEBLA - (2 * GR_PLYTY)
@@ -223,21 +218,14 @@ else:
 
 szer_jednej_wneki = szer_wew_total / n_sekcji_val if n_sekcji_val > 0 else 0
 wys_wewnetrzna = H_MEBLA - (2 * GR_PLYTY)
-
-gr_plecow = 0
-if "18mm" in TYP_PLECOW: gr_plecow = 18
-elif "16mm" in TYP_PLECOW: gr_plecow = 16
-
+gr_plecow = 18 if "18mm" in TYP_PLECOW else (16 if "16mm" in TYP_PLECOW else 0)
 glebokosc_wewnetrzna = D_MEBLA - gr_plecow
 
 lista_elementow = []
 counts_dict = {}
 
-# ==========================================
-# 5. FUNKCJE LOGIKI
-# ==========================================
 def get_unique_id(nazwa_baza):
-    key = nazwa_baza.upper().replace(" ", "_")
+    key = nazwa_baza.upper()
     if "BOK" in key: key = "BOK"
     elif "WIENIEC" in key: key = "WIENIEC"
     elif "PRZEGRODA" in key: key = "PRZEGRODA"
@@ -247,8 +235,8 @@ def get_unique_id(nazwa_baza):
     elif "DRZWI" in key: key = "DRZWI"
     elif "DNO" in key: key = "DNO"
     elif "TYŁ" in key: key = "TYL"
-    current = counts_dict.get(key, 0) + 1
-    counts_dict[key] = current
+    else: key = key.replace(" ", "_")
+    current = counts_dict.get(key, 0) + 1; counts_dict[key] = current
     return f"{KOD_PROJEKTU}_{key}_{current}"
 
 def opisz_oklejanie(nazwa, szer_el, wys_el):
@@ -261,8 +249,7 @@ def opisz_oklejanie(nazwa, szer_el, wys_el):
     return "Brak" if "DNO" in n or "TYŁ" in n or "PLECY" in n else "Wg uznania"
 
 def dodaj_el(nazwa, szer, wys, gr, mat, wiercenia, ori):
-    ident = get_unique_id(nazwa)
-    oklejanie = opisz_oklejanie(nazwa, szer, wys)
+    ident = get_unique_id(nazwa); oklejanie = opisz_oklejanie(nazwa, szer, wys)
     lista_elementow.append({
         "ID": ident, "Nazwa": nazwa, 
         "Szerokość [mm]": int(round(szer, 0)), "Wysokość [mm]": int(round(wys, 0)),
@@ -271,80 +258,42 @@ def dodaj_el(nazwa, szer, wys, gr, mat, wiercenia, ori):
     })
 
 def gen_wiercenia_boku(moduly, is_mirror=False):
-    otwory = []
-    # Używamy zmiennych globalnych obliczonych w sekcji 4
-    if is_mirror:
-        x_f = D_MEBLA - 37.0
-        x_b = D_MEBLA - (37.0 + 224.0)
-        x_plecy_ref = gr_plecow / 2
-    else:
-        x_f = 37.0
-        x_b = 37.0 + 224.0
-        x_plecy_ref = D_MEBLA - (gr_plecow / 2)
-
+    otwory = []; x_f = 37.0 if not is_mirror else D_MEBLA - 37.0
+    x_b = 37.0 + 224.0 if not is_mirror else D_MEBLA - (37.0 + 224.0)
+    x_plecy_ref = D_MEBLA - (gr_plecow / 2) if not is_mirror else gr_plecow / 2
     if "Wpuszczane" in TYP_KONSTRUKCJI:
         x_wt = 50.0 if is_mirror else D_MEBLA - 50.0
-        otwory.append((x_f, GR_PLYTY/2, 'blue'))
-        otwory.append((x_wt, GR_PLYTY/2, 'blue'))
-        otwory.append((x_f, H_MEBLA - GR_PLYTY/2, 'blue'))
-        otwory.append((x_wt, H_MEBLA - GR_PLYTY/2, 'blue'))
-
+        otwory += [(x_f, GR_PLYTY/2, 'blue'), (x_wt, GR_PLYTY/2, 'blue'), (x_f, H_MEBLA-GR_PLYTY/2, 'blue'), (x_wt, H_MEBLA-GR_PLYTY/2, 'blue')]
     if gr_plecow > 0:
-        ilosc_otw_plecy = int(H_MEBLA / 400) + 1
-        step_plecy = (H_MEBLA - 100) / ilosc_otw_plecy
-        for k in range(ilosc_otw_plecy + 1):
-            y_plecy = 50 + k * step_plecy
-            if y_plecy > GR_PLYTY and y_plecy < (H_MEBLA - GR_PLYTY):
-                otwory.append((x_plecy_ref, y_plecy, 'blue'))
+        step = (H_MEBLA - 100) / (int(H_MEBLA/400)+1)
+        for k in range(int(H_MEBLA/400)+2):
+            yp = 50 + k*step
+            if yp > GR_PLYTY and yp < H_MEBLA-GR_PLYTY: otwory.append((x_plecy_ref, yp, 'blue'))
     
-    curr_y = GR_PLYTY
-    fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
-    auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
-    h_auto = (wys_wewnetrzna - fixed_sum) / max(1, auto_cnt)
-    
+    curr_y = GR_PLYTY; h_auto = (wys_wewnetrzna - sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')) / max(1, sum(1 for m in moduly if m['wys_mode'] == 'auto'))
     for idx, mod in enumerate(moduly):
         h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
-        if idx > 0:
-            y_wieniec = curr_y + GR_PLYTY/2
-            x_wt = 50.0 if is_mirror else D_MEBLA - 50.0
-            otwory.append((x_f, y_wieniec, 'blue'))
-            otwory.append((x_wt, y_wieniec, 'blue'))
-            curr_y += GR_PLYTY
-            
+        if idx>0: 
+            yw = curr_y+GR_PLYTY/2; xt = 50.0 if is_mirror else D_MEBLA-50.0
+            otwory += [(x_f, yw, 'blue'), (xt, yw, 'blue')]; curr_y += GR_PLYTY
         det = mod['detale']
-        if det.get('drzwi'):
-            otwory.append((x_f, curr_y + 100, 'green'))
-            otwory.append((x_f, curr_y + h_mod - 100, 'green'))
-
+        if det.get('drzwi'): otwory += [(x_f, curr_y+100, 'green'), (x_f, curr_y+h_mod-100, 'green')]
         if mod['typ'] == "Szuflady":
-            n = det.get('ilosc', 2)
-            if n > 0:
-                h_front = (h_mod - ((n-1)*3)) / n
-                for k in range(n):
-                    ys = curr_y + k*(h_front+3) + 3 + params_szuflad["offset_prowadnica"]
-                    otwory.append((x_f, ys, 'red'))
-                    otwory.append((x_b, ys, 'red'))
-        
+            n = det.get('ilosc', 2); h_f = (h_mod - ((n-1)*3))/n
+            for k in range(n): ys = curr_y + k*(h_f+3) + 3 + 37; otwory += [(x_f, ys, 'red'), (x_b, ys, 'red')]
         elif mod['typ'] == "Półki":
-            n = det.get('ilosc', 1)
-            if n > 0:
-                gap = h_mod / (n + 1)
-                for k in range(n):
-                    yp = curr_y + (k+1)*gap
-                    x_back_hole = (50.0 if is_mirror else D_MEBLA - 50.0) if det.get('fixed') else ((50.0 if is_mirror else (D_MEBLA - gr_plecow) - 50.0))
-                    color = 'blue' if det.get('fixed') else 'green'
-                    otwory.append((x_f, yp, color))
-                    otwory.append((x_back_hole, yp, color))
+            n = det.get('ilosc', 1); gap = h_mod/(n+1)
+            for k in range(n):
+                yp = curr_y + (k+1)*gap; xb = 50.0 if is_mirror else D_MEBLA-50.0
+                if det.get('fixed'): otwory += [(x_f, yp, 'blue'), (xb, yp, 'blue')]
+                else: otwory += [(x_f, yp, 'green'), (xb if det.get('fixed') else (xb-gr_plecow if not is_mirror else 50.0), yp, 'green')]
         curr_y += h_mod
     return otwory
 
 def gen_konstrukcja():
-    global counts_dict
-    counts_dict = {}
+    global counts_dict; counts_dict = {}
     if "HDF" in TYP_PLECOW: dodaj_el("Plecy (HDF)", W_MEBLA-4, H_MEBLA-4, 3, "3mm HDF", [], "X")
-    elif gr_plecow > 0:
-        szer_plecow = W_MEBLA if "Nakładane" in TYP_KONSTRUKCJI else szer_wew_total + (ilosc_przegrod*GR_PLYTY)
-        dodaj_el("Plecy (Płyta)", szer_plecow, wys_wewnetrzna, gr_plecow, f"{gr_plecow}mm KORPUS", [], "X")
+    elif gr_plecow > 0: dodaj_el("Plecy (Płyta)", (W_MEBLA if "Nakładane" in TYP_KONSTRUKCJI else szer_wew_total + (ilosc_przegrod*GR_PLYTY)), wys_wewnetrzna, gr_plecow, f"{gr_plecow}mm KORPUS", [], "X")
     
     otw_L = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(0, []), False)
     dodaj_el("Bok Lewy", D_MEBLA, wys_boku, GR_PLYTY, "18mm KORPUS", otw_L, "L")
@@ -353,41 +302,26 @@ def gen_konstrukcja():
     dodaj_el("Wieniec Górny", szer_wienca, glebokosc_wewnetrzna, GR_PLYTY, "18mm KORPUS", [], "L")
     dodaj_el("Wieniec Dolny", szer_wienca, glebokosc_wewnetrzna, GR_PLYTY, "18mm KORPUS", [], "L")
     
-    for i in range(ilosc_przegrod):
-        mod_L = st.session_state['moduly_sekcji'].get(i, [])
-        mod_R = st.session_state['moduly_sekcji'].get(i+1, [])
-        otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False)
-        dodaj_el(f"Przegroda {i+1}", D_MEBLA, wys_wewnetrzna, GR_PLYTY, "18mm KORPUS", otw, "L")
-
     for i in range(n_sekcji_val):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
-        fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
-        auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
-        h_auto = (wys_wewnetrzna - fixed_sum) / max(1, auto_cnt)
-        
+        h_auto = (wys_wewnetrzna - sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')) / max(1, sum(1 for m in moduly if m['wys_mode'] == 'auto'))
         for idx, mod in enumerate(moduly):
             if idx > 0: dodaj_el(f"Wieniec Środkowy (Sekcja {i+1})", szer_jednej_wneki, glebokosc_wewnetrzna, GR_PLYTY, "18mm KORPUS", [], "L")
             h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
             det = mod['detale']
             if det.get('drzwi'): dodaj_el(f"Drzwi Sekcja {i+1}", szer_jednej_wneki-4, h_mod-4, 18, "18mm FRONT", [], "L")
-            is_inner = det.get('drzwi', False)
             if mod['typ'] == "Szuflady":
-                n = det.get('ilosc', 2)
-                h_f = (h_mod - ((n-1)*3)) / n
-                mat_f = "18mm KORPUS" if is_inner else "18mm FRONT"
+                n = det.get('ilosc', 2); h_f = (h_mod - ((n-1)*3)) / n
                 for _ in range(n):
-                    dodaj_el("Front Szuflady", szer_jednej_wneki-4, h_f, 18, mat_f, [], "D")
+                    dodaj_el("Front Szuflady", szer_jednej_wneki-4, h_f, 18, "18mm FRONT", [], "D")
                     dodaj_el("Dno Szuflady", szer_jednej_wneki-71, 476, 3, "3mm HDF", [], "D")
                     dodaj_el("Tył Szuflady", szer_jednej_wneki-83, 150, 16, "16mm BIAŁA", [], "D")
             elif mod['typ'] == "Półki":
-                n = det.get('ilosc', 1)
-                is_fixed = det.get('fixed', False)
+                n = det.get('ilosc', 1); is_fixed = det.get('fixed', False)
                 w_p = szer_jednej_wneki - (0 if is_fixed else 2)
-                if is_inner and not is_fixed: w_p -= 10
-                d_p = glebokosc_wewnetrzna if is_fixed else (glebokosc_wewnetrzna - 20)
-                for _ in range(n):
-                    typ_nazwa = "Półka Stała" if is_fixed else "Półka Ruchoma"
-                    dodaj_el(typ_nazwa, w_p, d_p, 18, "18mm KORPUS", [], "L")
+                if not is_fixed: w_p -= 10 # luz na drzwi
+                d_p = glebokosc_wewnetrzna if is_fixed else glebokosc_wewnetrzna-20
+                for _ in range(n): dodaj_el("Półka " + ("Stała" if is_fixed else "Ruchoma"), w_p, d_p, 18, "18mm KORPUS", [], "L")
 
 gen_konstrukcja()
 
@@ -579,7 +513,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr
         if i < n_przeg: ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3))
         moduly = moduly_sekcji.get(i, [])
         if moduly:
-            fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed'); auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto'); h_auto = (h_wew - fixed_sum) / auto_count if auto_count > 0 else 0; curr_y = gr
+            fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed'); auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto'); h_auto = (h_wew - fixed_sum) / max(1, auto_cnt); curr_y = gr
             for idx, mod in enumerate(moduly):
                 if idx > 0: ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, gr, facecolor='#d7ba9d', edgecolor='black')); curr_y += gr
                 h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto; det = mod['detale']
@@ -599,12 +533,12 @@ instrukcja_tekst = generuj_instrukcje_tekst()
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🛠️ INSTRUKCJA", "💰 KOSZTORYS", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
-    # FIX: BEZPIECZNE WYŚWIETLANIE TABELI (ArrowInvalid Fix)
-    df_display = df.drop(columns=['wiercenia', 'orientacja']) # Kopia bez kłopotliwej kolumny
+    # FIX: Używamy bezpiecznej tabeli bez width=None
+    df_display = df.drop(columns=['wiercenia', 'orientacja'])
     csv = df_display.to_csv(index=False).encode('utf-8-sig')
     
     st.download_button("💾 Pobierz CSV", csv, f"{KOD_PROJEKTU}.csv", "text/csv")
-    st.dataframe(df_display, width=None) # Wyświetlamy bezpieczną kopię
+    st.dataframe(df_display, use_container_width=True) # FIX: use_container_width
 
 with tabs[1]:
     if st.button("📄 PDF"):
