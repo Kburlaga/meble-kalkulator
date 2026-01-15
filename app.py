@@ -117,11 +117,12 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
 
 def get_unique_id(nazwa_baza, counts_dict, kod_projektu):
     key = nazwa_baza.upper().replace(" ", "_")
-    map_keys = {"BOK":"BOK", "WIENIEC":"WIENIEC", "PRZEGRODA":"PRZEGRODA", "FRONT":"FRONT", "PÓŁKA":"POLKA", "PLECY":"PLECY", "DRZWI":"DRZWI", "DNO":"DNO", "TYŁ":"TYL"}
-    key = map_keys.get(key, key)
+    # Uproszczenie kluczy, ale zachowanie numeracji
+    # Jeśli nazwa to np. "Front Szuflady 1", klucz będzie FRONT_SZUFLADY_1
     current = counts_dict.get(key, 0) + 1
     counts_dict[key] = current
-    return f"{kod_projektu}_{key}_{current}"
+    # Zwracamy sam kod projektu + nazwę (która teraz będzie unikalna z pętli)
+    return f"{kod_projektu}_{key}"
 
 def opisz_oklejanie(nazwa, szer_el, wys_el):
     n = nazwa.upper()
@@ -311,22 +312,24 @@ def run_generator():
             if idx > 0: dodaj_element_do_listy(f"Wieniec Środkowy (Sekcja {i+1})", SZER_JEDNEJ_WNEKI, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", [], "L")
             h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
             det = mod['detale']
-            if det.get('drzwi'): dodaj_element_do_listy(f"Drzwi Sekcja {i+1}", SZER_JEDNEJ_WNEKI-4, h_mod-4, 18, "18mm FRONT", [], "L")
+            if det.get('drzwi'): dodaj_element_do_listy(f"Drzwi (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-4, h_mod-4, 18, "18mm FRONT", [], "L")
             
             if mod['typ'] == "Szuflady":
                 n = det.get('ilosc', 2); h_f = (h_mod - ((n-1)*3)) / n
                 mat_f = "18mm KORPUS" if det.get('drzwi') else "18mm FRONT"
-                for _ in range(n):
-                    dodaj_element_do_listy("Front Szuflady", SZER_JEDNEJ_WNEKI-4, h_f, 18, mat_f, [], "D")
-                    dodaj_element_do_listy("Dno Szuflady", SZER_JEDNEJ_WNEKI-71, 476, 3, "3mm HDF", [], "D")
-                    dodaj_element_do_listy("Tył Szuflady", SZER_JEDNEJ_WNEKI-83, 150, 16, "16mm BIAŁA", [], "D")
+                for k in range(n):
+                    # UNIKALNA NAZWA DLA KAŻDEJ SZUFLADY
+                    dodaj_element_do_listy(f"Front Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-4, h_f, 18, mat_f, [], "D")
+                    dodaj_element_do_listy(f"Dno Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-71, 476, 3, "3mm HDF", [], "D")
+                    dodaj_element_do_listy(f"Tył Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-83, 150, 16, "16mm BIAŁA", [], "D")
             elif mod['typ'] == "Półki":
                 n = det.get('ilosc', 1); is_fixed = det.get('fixed', False)
                 w_p = SZER_JEDNEJ_WNEKI - (0 if is_fixed else 2)
                 if det.get('drzwi') and not is_fixed: w_p -= 10
                 d_p = GLEBOKOSC_WEWNETRZNA if is_fixed else (GLEBOKOSC_WEWNETRZNA - 20)
-                for _ in range(n):
-                    dodaj_element_do_listy("Półka " + ("Stała" if is_fixed else "Ruchoma"), w_p, d_p, 18, "18mm KORPUS", [], "L")
+                for k in range(n):
+                    typ_nazwa = "Półka Stała" if is_fixed else "Półka Ruchoma"
+                    dodaj_element_do_listy(f"{typ_nazwa} {k+1} (Sekcja {i+1})", w_p, d_p, 18, "18mm KORPUS", [], "L")
 
 run_generator()
 df = pd.DataFrame(lista_elementow)
@@ -397,11 +400,11 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
         unique_y = sorted(list(set([o[1] for o in otwory])))
         for y_line in unique_y:
             ax.plot([-500, szer+500], [y_line, y_line], color='#666666', linestyle='--', linewidth=0.5, alpha=0.5, zorder=2)
-            ax.text(-15, y_line, f"Y:{y_line:.0f}", ha='right', va='center', fontsize=8, color='black', weight='bold')
-            ax.text(szer+15, y_line, f"{y_line:.0f}", ha='left', va='center', fontsize=8, color='black')
+            ax.text(-25, y_line, f"Y:{y_line:.0f}", ha='right', va='center', fontsize=8, color='black', weight='bold')
+            ax.text(szer+25, y_line, f"{y_line:.0f}", ha='left', va='center', fontsize=8, color='black')
         for x_line in unique_x:
             ax.plot([x_line, x_line], [-500, wys+500], color='#666666', linestyle='--', linewidth=0.5, alpha=0.5, zorder=2)
-            ax.text(x_line, -20, f"X:{x_line:.0f}", ha='center', va='top', fontsize=8, color='black', weight='bold', rotation=90)
+            ax.text(x_line, -30, f"X:{x_line:.0f}", ha='center', va='top', fontsize=8, color='black', weight='bold', rotation=90)
         
         otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
         for i, otw in enumerate(otwory_sorted):
@@ -418,7 +421,7 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
 
     is_poziomy = "WIENIEC" in nazwa.upper() or "PÓŁKA" in nazwa.upper()
     if "Plecy" not in nazwa:
-        dist = 60
+        dist = 150 # FIX: Odsunięcie napisu FRONT o 150mm!
         if is_poziomy:
             ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
             ax.text(szer/2, -dist, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
@@ -433,9 +436,12 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
                 ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
                 ax.text(szer/2, -dist, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
 
-    ax.text(szer/2, wys + 40, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
-    ax.text(szer + 40, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
-    margin_x = max(szer * 0.15, 100); margin_y = max(wys * 0.15, 100)
+    # Wymiary główne jeszcze dalej
+    ax.text(szer/2, wys + 140, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
+    ax.text(szer + 140, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
+    
+    # Marginesy zwiększone dla pomieszczenia nowych napisów
+    margin_x = max(szer * 0.2, 200); margin_y = max(wys * 0.2, 200)
     ax.set_xlim(-margin_x, szer + margin_x); ax.set_ylim(-margin_y, wys + margin_y)
     plt.subplots_adjust(left=0.02, right=0.98, top=0.95, bottom=0.02); ax.set_aspect('equal'); ax.axis('off'); return fig
 
