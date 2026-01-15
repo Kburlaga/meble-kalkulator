@@ -117,12 +117,23 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
 
 def get_unique_id(nazwa_baza, counts_dict, kod_projektu):
     key = nazwa_baza.upper().replace(" ", "_")
-    # Uproszczenie kluczy, ale zachowanie numeracji
-    # Jeśli nazwa to np. "Front Szuflady 1", klucz będzie FRONT_SZUFLADY_1
-    current = counts_dict.get(key, 0) + 1
-    counts_dict[key] = current
-    # Zwracamy sam kod projektu + nazwę (która teraz będzie unikalna z pętli)
-    return f"{kod_projektu}_{key}"
+    # Skracanie kluczy dla czytelności ID
+    map_keys = {
+        "BOK LEWY": "BOK_L", "BOK PRAWY": "BOK_P", 
+        "WIENIEC GÓRNY": "WIENIEC_G", "WIENIEC DOLNY": "WIENIEC_D",
+        "PRZEGRODA": "PRZEG", "FRONT SZUFLADY": "FR_SZUF",
+        "DNO SZUFLADY": "DNO_SZUF", "TYŁ SZUFLADY": "TYL_SZUF"
+    }
+    # Jeśli nazwa zaczyna się od klucza z mapy, użyj skrótu
+    short_key = key
+    for k, v in map_keys.items():
+        if key.startswith(k.replace(" ", "_")):
+            short_key = key.replace(k.replace(" ", "_"), v)
+            break
+            
+    current = counts_dict.get(short_key, 0) + 1
+    counts_dict[short_key] = current
+    return f"{kod_projektu}_{short_key}_{current}"
 
 def opisz_oklejanie(nazwa, szer_el, wys_el):
     n = nazwa.upper()
@@ -318,7 +329,6 @@ def run_generator():
                 n = det.get('ilosc', 2); h_f = (h_mod - ((n-1)*3)) / n
                 mat_f = "18mm KORPUS" if det.get('drzwi') else "18mm FRONT"
                 for k in range(n):
-                    # UNIKALNA NAZWA DLA KAŻDEJ SZUFLADY
                     dodaj_element_do_listy(f"Front Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-4, h_f, 18, mat_f, [], "D")
                     dodaj_element_do_listy(f"Dno Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-71, 476, 3, "3mm HDF", [], "D")
                     dodaj_element_do_listy(f"Tył Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-83, 150, 16, "16mm BIAŁA", [], "D")
@@ -388,13 +398,24 @@ def rysuj_instrukcje_pdf(tekst):
     ax.text(0.05, 0.95, wrapped_text, ha='left', va='top', fontsize=10, family='monospace', linespacing=1.4)
     return fig
 
+# FIX: Nowy sposób rysowania tytułu (Figure Text) zamiast Axis Title
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
-    plt.close('all'); fig, ax = plt.subplots(figsize=figsize)
+    plt.close('all')
+    fig, ax = plt.subplots(figsize=figsize)
+    
     if "HDF" in nazwa: kolor_tla = '#d9d9d9'
-    ax.set_title(f"{id_elementu}\n[{nazwa}]", fontsize=16, weight='bold', pad=20, color='#333333')
+    
+    # Rysunek
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
     ax.add_patch(rect)
     
+    # HEADER (Tytuł na sztywno na górze strony)
+    # Linia 1: Nazwa Elementu
+    fig.text(0.5, 0.96, nazwa.upper(), ha='center', va='top', fontsize=18, weight='bold', color='black')
+    # Linia 2: ID Systemowe
+    fig.text(0.5, 0.93, id_elementu, ha='center', va='top', fontsize=10, color='#555555', family='monospace')
+
+    # Otwory i Linie Traserskie
     if otwory:
         unique_x = sorted(list(set([o[0] for o in otwory])))
         unique_y = sorted(list(set([o[1] for o in otwory])))
@@ -421,7 +442,7 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
 
     is_poziomy = "WIENIEC" in nazwa.upper() or "PÓŁKA" in nazwa.upper()
     if "Plecy" not in nazwa:
-        dist = 150 # FIX: Odsunięcie napisu FRONT o 150mm!
+        dist = 150
         if is_poziomy:
             ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
             ax.text(szer/2, -dist, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
@@ -436,19 +457,24 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
                 ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
                 ax.text(szer/2, -dist, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
 
-    # Wymiary główne jeszcze dalej
     ax.text(szer/2, wys + 140, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
     ax.text(szer + 140, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
     
-    # Marginesy zwiększone dla pomieszczenia nowych napisów
     margin_x = max(szer * 0.2, 200); margin_y = max(wys * 0.2, 200)
     ax.set_xlim(-margin_x, szer + margin_x); ax.set_ylim(-margin_y, wys + margin_y)
-    plt.subplots_adjust(left=0.02, right=0.98, top=0.95, bottom=0.02); ax.set_aspect('equal'); ax.axis('off'); return fig
+    
+    # Zostawiamy miejsce na tytuł (top=0.88)
+    plt.subplots_adjust(left=0.02, right=0.98, top=0.88, bottom=0.02)
+    ax.set_aspect('equal'); ax.axis('off')
+    return fig
 
 def rysuj_tabele_strona(id_elementu, nazwa, otwory):
     plt.close('all'); fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis('off')
-    ax.text(0.5, 0.95, f"TABELA WIERCEŃ: {id_elementu}", ha='center', fontsize=14, weight='bold')
-    ax.text(0.5, 0.92, f"Element: {nazwa}", ha='center', fontsize=12, color='#555')
+    # Tytuł też tutaj
+    fig.text(0.5, 0.95, f"TABELA WIERCEŃ", ha='center', fontsize=16, weight='bold')
+    fig.text(0.5, 0.92, f"Element: {nazwa}", ha='center', fontsize=12)
+    fig.text(0.5, 0.90, f"ID: {id_elementu}", ha='center', fontsize=10, color='#555', family='monospace')
+    
     table_data = []
     otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
     for i, otw in enumerate(otwory_sorted):
@@ -457,7 +483,7 @@ def rysuj_tabele_strona(id_elementu, nazwa, otwory):
         table_data.append([str(nr), f"{x:.1f}", f"{y:.1f}", typ])
     if table_data:
         col_labels = ["Nr", "X [mm]", "Y [mm]", "Typ Otworu"]; col_widths = [0.1, 0.2, 0.2, 0.5]
-        table = ax.table(cellText=table_data, colLabels=col_labels, loc='top', bbox=[0.05, 0.05, 0.9, 0.85], cellLoc='center', colWidths=col_widths)
+        table = ax.table(cellText=table_data, colLabels=col_labels, loc='top', bbox=[0.05, 0.05, 0.9, 0.80], cellLoc='center', colWidths=col_widths)
         table.auto_set_font_size(False); table.set_fontsize(10)
         for (row, col), cell in table.get_celld().items():
             cell.set_height(0.04)
