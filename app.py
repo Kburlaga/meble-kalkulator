@@ -114,12 +114,12 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (MAPA + TABELA ZOPTYMALIZOWANA)
+# 3. RYSOWANIE (LINIE TRASERSKIE)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
     
-    # Wykrywanie orientacji do wydruku (dla logiki tabeli)
+    # Wykrywanie orientacji
     is_landscape = szer > wys
     
     fig, ax = plt.subplots(figsize=figsize)
@@ -135,6 +135,28 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     table_data = []
     
     if otwory:
+        # 1. RYSOWANIE LINII TRASERSKICH (SIATKA)
+        # Znajdź unikalne współrzędne X i Y
+        unique_x = sorted(list(set([o[0] for o in otwory])))
+        unique_y = sorted(list(set([o[1] for o in otwory])))
+        
+        # Linie Poziome (Y)
+        for y_line in unique_y:
+            # Rysuj linię przez całą szerokość
+            ax.plot([-20, szer+20], [y_line, y_line], color='#666666', linestyle='--', linewidth=0.6, alpha=0.5, zorder=2)
+            # Opis na marginesie lewym
+            ax.text(-5, y_line, f"Y:{y_line:.0f}", ha='right', va='center', fontsize=7, color='#666666', alpha=0.8)
+            # Opis na marginesie prawym (dla wygody)
+            ax.text(szer+5, y_line, f"{y_line:.0f}", ha='left', va='center', fontsize=7, color='#666666', alpha=0.8)
+
+        # Linie Pionowe (X)
+        for x_line in unique_x:
+            # Rysuj linię przez całą wysokość
+            ax.plot([x_line, x_line], [-20, wys+20], color='#666666', linestyle='--', linewidth=0.6, alpha=0.5, zorder=2)
+            # Opis na dole
+            ax.text(x_line, -15, f"{x_line:.0f}", ha='center', va='top', fontsize=7, color='#666666', alpha=0.8, rotation=90)
+
+        # 2. RYSOWANIE OTWORÓW
         otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
         
         for i, otw in enumerate(otwory_sorted):
@@ -155,33 +177,42 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
                 r = 17.5 if "Front" in nazwa else 4
                 ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
 
-            # NUMERACJA (BADGE)
+            # Numer w kółku
             ax.add_patch(patches.Circle((x + 12, y + 12), radius=9, color='black', zorder=40))
             ax.text(x + 12, y + 12, str(nr), color='white', ha='center', va='center', fontsize=9, weight='bold', zorder=41)
             
             table_data.append([str(nr), f"{x:.1f}", f"{y:.1f}", typ_otworu])
 
-        # RYSOWANIE TABELI (POPRAWIONE SZEROKOŚCI)
+        # 3. TABELA (DYNAMICZNA)
         if table_data:
-            col_labels = ["Nr", "X", "Y", "Typ"]
+            num_rows = len(table_data) + 1 
+            row_height_factor = 0.035 if not is_landscape else 0.05
+            table_height_fraction = min(num_rows * row_height_factor, 0.45) 
+            margin_bottom = table_height_fraction + 0.1
             
-            # Definiujemy proporcje kolumn (Nr, X, Y, Typ)
+            col_labels = ["Nr", "X", "Y", "Typ"]
             col_widths = [0.1, 0.25, 0.25, 0.4] 
             
             if is_landscape:
-                # POZIOMA: Tabela pod rysunkiem, szeroka
-                plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.30)
-                # bbox=[left, bottom, width, height]
-                bbox = [0.0, -0.40, 1.0, 0.30]
+                plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=margin_bottom)
+                ax_height = 0.90 - margin_bottom
+                if ax_height > 0:
+                    bbox_h = table_height_fraction / ax_height
+                    bbox = [0.0, -bbox_h - 0.15, 1.0, bbox_h]
+                else:
+                    bbox = [0, -0.5, 1, 0.5]
             else:
-                # PIONOWA: Tabela pod rysunkiem, ale szersza niż poprzednio (0.9 zamiast 0.6)
-                plt.subplots_adjust(left=0.1, right=0.90, top=0.95, bottom=0.25)
-                # FIX: Szerokość 90% zamiast 60%, żeby tekst się mieścił
-                bbox = [0.0, -0.30, 0.9, 0.25]
+                plt.subplots_adjust(left=0.1, right=0.90, top=0.95, bottom=margin_bottom)
+                ax_height = 0.95 - margin_bottom
+                if ax_height > 0:
+                    bbox_h = table_height_fraction / ax_height
+                    bbox = [0.0, -bbox_h - 0.1, 0.9, bbox_h]
+                else:
+                    bbox = [0, -0.5, 0.9, 0.5]
 
             table = ax.table(cellText=table_data, colLabels=col_labels, loc='center', bbox=bbox, cellLoc='center', colWidths=col_widths)
             table.auto_set_font_size(False)
-            table.set_fontsize(10) # WYMAGANIE: Czcionka 10
+            table.set_fontsize(10)
             
             for (row, col), cell in table.get_celld().items():
                 if row == 0:
