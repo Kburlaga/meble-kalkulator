@@ -191,7 +191,6 @@ with st.sidebar:
 # ==========================================
 # 4. SILNIK OBLICZENIOWY (GŁÓWNY)
 # ==========================================
-# Pobieramy zmienne dopiero teraz, gdy Sidebar je ustawił
 PARAMS_SZUFLAD = BAZA_SYSTEMOW[sys_k]
 PARAMS_ZAWIAS = BAZA_ZAWIASOW[zaw_k]
 H_MEBLA = st.session_state['h_mebla']
@@ -234,25 +233,21 @@ def dodaj_element_do_listy(nazwa, szer, wys, gr, mat, wiercenia, ori):
 
 def gen_wiercenia_boku(moduly, is_mirror=False):
     otwory = []
-    # Parametry geometryczne
     if is_mirror:
         x_f = D_MEBLA - 37.0; x_b = D_MEBLA - (37.0 + 224.0); x_plecy_ref = GR_PLECOW / 2
     else:
         x_f = 37.0; x_b = 37.0 + 224.0; x_plecy_ref = D_MEBLA - (GR_PLECOW / 2)
 
-    # Konstrukcja
     if "Wpuszczane" in TYP_KONSTRUKCJI:
         x_wt = 50.0 if is_mirror else D_MEBLA - 50.0
         otwory += [(x_f, GR_PLYTY/2, 'blue'), (x_wt, GR_PLYTY/2, 'blue'), (x_f, H_MEBLA-GR_PLYTY/2, 'blue'), (x_wt, H_MEBLA-GR_PLYTY/2, 'blue')]
 
-    # Plecy (płyta wpuszczana)
     if GR_PLECOW > 0:
         ilosc_otw = int(H_MEBLA / 400) + 1
         for k in range(ilosc_otw + 1):
             yp = 50 + k * ((H_MEBLA - 100) / ilosc_otw)
             if yp > GR_PLYTY and yp < (H_MEBLA - GR_PLYTY): otwory.append((x_plecy_ref, yp, 'blue'))
     
-    # Moduły
     curr_y = GR_PLYTY
     fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
     auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
@@ -283,35 +278,29 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
         curr_y += h_mod
     return otwory
 
-# Główna pętla generująca elementy
 def run_generator():
     global lista_elementow
-    lista_elementow = [] # Reset listy
+    lista_elementow = [] 
     
-    # Plecy
     if "HDF" in TYP_PLECOW: dodaj_element_do_listy("Plecy (HDF)", W_MEBLA-4, H_MEBLA-4, 3, "3mm HDF", [], "X")
     elif GR_PLECOW > 0:
         szer_pl = W_MEBLA if "Nakładane" in TYP_KONSTRUKCJI else SZER_WEW_TOTAL + (ILOSC_PRZEGROD*GR_PLYTY)
         dodaj_element_do_listy("Plecy (Płyta)", szer_pl, WYS_WEWNETRZNA, GR_PLECOW, f"{GR_PLECOW}mm KORPUS", [], "X")
     
-    # Boki
     otw_L = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(0, []), False)
     dodaj_element_do_listy("Bok Lewy", D_MEBLA, WYS_BOKU, GR_PLYTY, "18mm KORPUS", otw_L, "L")
     
     otw_P = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(N_SEKCJI-1, []), True)
     dodaj_element_do_listy("Bok Prawy", D_MEBLA, WYS_BOKU, GR_PLYTY, "18mm KORPUS", otw_P, "P")
     
-    # Wieńce
     dodaj_element_do_listy("Wieniec Górny", SZER_WIENCA, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", [], "L")
     dodaj_element_do_listy("Wieniec Dolny", SZER_WIENCA, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", [], "L")
     
-    # Przegrody
     for i in range(ILOSC_PRZEGROD):
         mod_L = st.session_state['moduly_sekcji'].get(i, []); mod_R = st.session_state['moduly_sekcji'].get(i+1, [])
         otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False)
         dodaj_element_do_listy(f"Przegroda {i+1}", D_MEBLA, WYS_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", otw, "L")
 
-    # Wypełnienie
     for i in range(N_SEKCJI):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
         fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
@@ -322,7 +311,6 @@ def run_generator():
             if idx > 0: dodaj_element_do_listy(f"Wieniec Środkowy (Sekcja {i+1})", SZER_JEDNEJ_WNEKI, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", [], "L")
             h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
             det = mod['detale']
-            
             if det.get('drzwi'): dodaj_element_do_listy(f"Drzwi Sekcja {i+1}", SZER_JEDNEJ_WNEKI-4, h_mod-4, 18, "18mm FRONT", [], "L")
             
             if mod['typ'] == "Szuflady":
@@ -340,9 +328,7 @@ def run_generator():
                 for _ in range(n):
                     dodaj_element_do_listy("Półka " + ("Stała" if is_fixed else "Ruchoma"), w_p, d_p, 18, "18mm KORPUS", [], "L")
 
-# URUCHOMIENIE LOGIKI
 run_generator()
-# TWORZENIE DATAFRAME (TERAZ!)
 df = pd.DataFrame(lista_elementow)
 
 # ==========================================
@@ -374,9 +360,9 @@ def generuj_instrukcje_tekst():
     steps.append(f"[ ] Wkręty 3.5x16: ok. {wkr} szt.")
     steps.append("-" * 60)
     steps.append("KROK 0: TRASOWANIE")
-    steps.append("1. Weź Boki szafki. Spójrz na rysunki w PDF.")
+    steps.append("1. Weź Boki szafki i spójrz na rysunki w PDF.")
     steps.append("2. Linie przerywane (Y:..., X:...) to linie pomocnicze.")
-    steps.append("3. Narysuj je ołówkiem na płycie.")
+    steps.append("3. Narysuj je ołówkiem na płycie. Przecięcia to punkty wiercenia.")
     steps.append("")
     steps.append("KROK 1: WIERCENIE")
     steps.append("1. Punkty NIEBIESKIE (Konfirmaty): Wiertło fi 5mm/7mm (przelotowo przez bok).")
@@ -492,6 +478,17 @@ def rysuj_arkusz(sheet_data, idx):
     for p in sheet_data['placements']: x, y, w, h, name = p; ax.add_patch(patches.Rectangle((x, y), w, h, facecolor='#d7ba9d', edgecolor='black', alpha=0.8)); ax.text(x + w/2, y + h/2, f"{name}\n{w:.0f}x{h:.0f}", ha='center', va='center', fontsize=6)
     ax.set_xlim(0, 2800); ax.set_ylim(0, 2070); ax.set_aspect('equal'); ax.axis('off'); return fig
 
+def generuj_szablon_a4(element, rog):
+    plt.close('all'); fig, ax = plt.subplots(figsize=(8.27, 11.69)); szer, wys = element['Szerokość [mm]'], element['Wysokość [mm]']; otwory = element['wiercenia']; plt.title(f"SZABLON: {element['ID']} ({rog})", fontsize=14, pad=10)
+    ax.add_patch(patches.Rectangle((0, 0), szer, wys, linewidth=3, edgecolor='black', facecolor='#eee', zorder=1))
+    for otw in otwory: x, y = otw[0], otw[1]; kolor = otw[2] if len(otw) > 2 else 'black'; ax.plot([x-10, x+10], [y, y], color=kolor, linewidth=1.5, zorder=10); ax.plot([x, x], [y-10, y+10], color=kolor, linewidth=1.5, zorder=10); ax.text(x+5, y+5, f"({x:.0f}, {y:.0f})", fontsize=9, color=kolor, zorder=20, weight='bold')
+    a4_w, a4_h, m = 210, 297, 10
+    if "LD" in rog: ax.set_xlim(-m, a4_w-m); ax.set_ylim(-m, a4_h-m)
+    elif "LG" in rog: ax.set_xlim(-m, a4_w-m); ax.set_ylim(wys-a4_h+m, wys+m)
+    elif "PD" in rog: ax.set_xlim(szer-a4_w+m, szer+m); ax.set_ylim(-m, a4_h-m)
+    elif "PG" in rog: ax.set_xlim(szer-a4_w+m, szer+m); ax.set_ylim(wys-a4_h+m, wys+m)
+    ax.set_aspect('equal'); ax.grid(True, linestyle=':', alpha=0.5); return fig
+
 def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr):
     plt.close('all'); fig, ax = plt.subplots(figsize=(12, 8)); plt.title(f"WIZUALIZACJA: {st.session_state['kod_pro']}\n{typ_konstr}", fontsize=18, weight='bold', pad=20)
     if "Wpuszczane" in typ_konstr: ax.add_patch(patches.Rectangle((0, 0), gr, h, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((w-gr, 0), gr, h, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((gr, h-gr), w-2*gr, gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((gr, 0), w-2*gr, gr, facecolor='#d7ba9d', edgecolor='black'))
@@ -578,4 +575,4 @@ with tabs[4]:
         for i, ark in enumerate(arkusze): st.pyplot(rysuj_arkusz(ark, i))
     else: st.warning("Brak elementów korpusu do rozkroju.")
 
-with tabs[5]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ilosc_przegrod, st.session_state['moduly_sekcji'], SZER_JEDNEJ_WNEKI, TYP_KONSTRUKCJI))
+with tabs[5]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ILOSC_PRZEGROD, st.session_state['moduly_sekcji'], SZER_JEDNEJ_WNEKI, TYP_KONSTRUKCJI))
