@@ -3,7 +3,7 @@ import pandas as pd
 import io
 import copy
 import json
-import textwrap  # Do zawijania tekstu w PDF
+import textwrap
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.backends.backend_pdf import PdfPages
@@ -28,7 +28,7 @@ BAZA_ZAWIASOW = {
 }
 
 # ==========================================
-# 1. ZARZĄDZANIE STANEM I PROJEKTEM
+# 1. ZARZĄDZANIE STANEM
 # ==========================================
 def init_state():
     defaults = {
@@ -90,7 +90,7 @@ def load_project_from_json(uploaded_file):
         st.error(f"Błąd pliku: {e}")
 
 # ==========================================
-# 2. LOGIKA MODUŁÓW
+# 2. LOGIKA MODUŁÓW (SIDEBAR)
 # ==========================================
 def usun_modul(nr_sekcji, idx):
     current_data = copy.deepcopy(st.session_state['moduly_sekcji'])
@@ -116,7 +116,7 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. INTERFEJS GŁÓWNY
+# 3. INTERFEJS GŁÓWNY (SIDEBAR)
 # ==========================================
 with st.sidebar:
     st.title("🪚 STOLARZPRO V20.3")
@@ -133,7 +133,6 @@ with st.sidebar:
         st.rerun()
     
     st.markdown("---")
-    
     st.markdown("### 1. Gabaryty")
     st.text_input("Nazwa", key="kod_pro")
     st.selectbox("Typ konstrukcji", ["Wieńce Nakładane", "Wieńce Wpuszczane"], key="typ_konstrukcji")
@@ -196,8 +195,9 @@ with st.sidebar:
     zaw_k = c_s2.selectbox("Zawiasy", list(BAZA_ZAWIASOW.keys()))
 
 # ==========================================
-# 4. GLOBALNE ZMIENNE (PRZED FUNKCJAMI)
+# 4. OBLICZENIA ZMIENNYCH GLOBALNYCH
 # ==========================================
+# (Obliczamy to ZANIM wywołamy funkcje generujące, aby uniknąć NameError)
 params_szuflad = BAZA_SYSTEMOW[sys_k]
 params_zawias = BAZA_ZAWIASOW[zaw_k]
 H_MEBLA = st.session_state['h_mebla']
@@ -213,7 +213,8 @@ KOD_PROJEKTU = st.session_state['kod_pro'].upper().replace(" ", "_")
 if "Wpuszczane" in TYP_KONSTRUKCJI:
     wys_boku = H_MEBLA
     szer_wienca = W_MEBLA - (2 * GR_PLYTY) - (ilosc_przegrod * GR_PLYTY)
-    if ilosc_przegrod > 0: szer_wienca = W_MEBLA - (2 * GR_PLYTY) 
+    if ilosc_przegrod > 0:
+        szer_wienca = W_MEBLA - (2 * GR_PLYTY) 
     szer_wew_total = szer_wienca - (ilosc_przegrod * GR_PLYTY)
 else:
     wys_boku = H_MEBLA - (2 * GR_PLYTY)
@@ -233,9 +234,8 @@ lista_elementow = []
 counts_dict = {}
 
 # ==========================================
-# 5. FUNKCJE GENERUJĄCE
+# 5. FUNKCJE LOGIKI
 # ==========================================
-
 def get_unique_id(nazwa_baza):
     key = nazwa_baza.upper().replace(" ", "_")
     if "BOK" in key: key = "BOK"
@@ -272,6 +272,7 @@ def dodaj_el(nazwa, szer, wys, gr, mat, wiercenia, ori):
 
 def gen_wiercenia_boku(moduly, is_mirror=False):
     otwory = []
+    # Używamy zmiennych globalnych obliczonych w sekcji 4
     if is_mirror:
         x_f = D_MEBLA - 37.0
         x_b = D_MEBLA - (37.0 + 224.0)
@@ -391,30 +392,22 @@ def gen_konstrukcja():
 gen_konstrukcja()
 
 # ==========================================
-# 6. GENERATOR INSTRUKCJI (NOWOŚĆ)
+# 6. FUNKCJE RYSOWANIA
 # ==========================================
 def generuj_instrukcje_tekst():
     steps = []
     steps.append(f"INSTRUKCJA MONTAŻU: {KOD_PROJEKTU}")
     steps.append(f"Wymiary: {H_MEBLA}x{W_MEBLA}x{D_MEBLA}mm | Konstrukcja: {TYP_KONSTRUKCJI}")
     steps.append("-" * 40)
-    
-    # KROK 1: PRZYGOTOWANIE
     steps.append("KROK 1: PRZYGOTOWANIE BOKÓW")
     steps.append("1. Połóż Bok Lewy i Prawy na płaskiej, czystej powierzchni.")
-    
     has_szuflady = any("Szuflady" in m['typ'] for s in st.session_state['moduly_sekcji'].values() for m in s)
     has_drzwi = any(m['detale'].get('drzwi') for s in st.session_state['moduly_sekcji'].values() for m in s)
-    
     if has_szuflady:
         steps.append("2. Przykręć prowadnice szuflad w zaznaczonych CZERWONYCH punktach.")
         steps.append("   Pamiętaj o cofnięciu prowadnicy 37mm od krawędzi frontowej.")
-    if has_drzwi:
-        steps.append("3. Przykręć prowadniki zawiasów w zaznaczonych ZIELONYCH punktach.")
-        
+    if has_drzwi: steps.append("3. Przykręć prowadniki zawiasów w zaznaczonych ZIELONYCH punktach.")
     steps.append("-" * 40)
-    
-    # KROK 2: KORPUS
     steps.append("KROK 2: SKŁADANIE KORPUSU")
     if "Wpuszczane" in TYP_KONSTRUKCJI:
         steps.append("1. Postaw jeden z boków na krawędzi tylnej.")
@@ -423,60 +416,37 @@ def generuj_instrukcje_tekst():
     else:
         steps.append("1. Wieniec Dolny i Górny nakładamy NA boki.")
         steps.append("2. Skręć wieńce z bokami od góry i dołu.")
-        
-    # Wieńce środkowe
-    if len(st.session_state['moduly_sekcji']) > 0:
-        for s_idx, moduly in st.session_state['moduly_sekcji'].items():
-            if len(moduly) > 1:
-                steps.append(f"3. W sekcji {s_idx+1}: Zamontuj wieniec/półkę stałą między modułami.")
-    
     steps.append("-" * 40)
-    
-    # KROK 3: PLECY
-    steps.append("KROK 3: MONTAŻ PLECÓW")
+    steps.append("KROK 3: PLECY")
     if "HDF" in TYP_PLECOW:
         steps.append("1. Wyrównaj przekątne korpusu (muszą być równe!).")
         steps.append("2. Przybij plecy HDF gwoździami lub przykręć wkrętami 3x16.")
     elif "Płyta" in TYP_PLECOW:
         steps.append("1. Wsuń formatkę pleców do wnętrza korpusu.")
         steps.append("2. Przykręć plecy konfirmatami przez boki (otwory na tylnej krawędzi).")
-    else:
-        steps.append("Mebel bez pleców - pomiń ten krok.")
-        
+    else: steps.append("Mebel bez pleców - pomiń ten krok.")
     steps.append("-" * 40)
-    
-    # KROK 4: WYPOSAŻENIE
     steps.append("KROK 4: WYPOSAŻENIE I FRONTY")
     if has_szuflady:
         steps.append("1. Złóż skrzynki szuflad (Boki + Dno + Tył).")
         steps.append("2. Przykręć fronty do skrzynek szuflad.")
         steps.append("3. Wsuń szuflady w prowadnice.")
-    
     steps.append("4. Włóż półki ruchome na podpórki.")
-    
     if has_drzwi:
         steps.append("5. Przykręć puszki zawiasów do drzwi.")
         steps.append("6. Zatrzaśnij zawiasy na prowadnikach i wyreguluj szczeliny.")
-        
     steps.append("-" * 40)
     steps.append("GOTOWE! Twój mebel jest złożony.")
-    
     return "\n".join(steps)
 
 def rysuj_instrukcje_pdf(tekst):
     plt.close('all')
     fig, ax = plt.subplots(figsize=(8.27, 11.69))
     ax.axis('off')
-    
-    # Zawijanie tekstu
     wrapped_text = "\n".join([textwrap.fill(line, width=80) for line in tekst.split('\n')])
-    
     ax.text(0.05, 0.95, wrapped_text, ha='left', va='top', fontsize=10, family='monospace', linespacing=1.5)
     return fig
 
-# ==========================================
-# 7. RYSOWANIE (RYSUNEK + TABELA)
-# ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
     fig, ax = plt.subplots(figsize=figsize)
@@ -569,7 +539,6 @@ def rysuj_tabele_strona(id_elementu, nazwa, otwory):
     else: ax.text(0.5, 0.5, "Brak otworów.", ha='center')
     return fig
 
-# ... (rysuj_nesting, rysuj_arkusz, rysuj_podglad_mebla, generuj_szablon_a4 bez zmian) ...
 def rysuj_nesting(elementy, arkusz_w=2800, arkusz_h=2070, rzaz=4):
     elementy_sorted = sorted(elementy, key=lambda x: x['h'], reverse=True)
     sheets = []; current_sheet = {'w': arkusz_w, 'h': arkusz_h, 'placements': []}; shelf_x, shelf_y, shelf_h = 0, 0, 0
@@ -622,7 +591,7 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr
     ax.set_xlim(-100, w + 100); ax.set_ylim(-100, h + 100); ax.set_aspect('equal'); ax.axis('off'); return fig
 
 # ==========================================
-# 6. WIDOK
+# 7. WIDOK
 # ==========================================
 df = pd.DataFrame(lista_elementow)
 instrukcja_tekst = generuj_instrukcje_tekst()
@@ -630,9 +599,12 @@ instrukcja_tekst = generuj_instrukcje_tekst()
 tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🛠️ INSTRUKCJA", "💰 KOSZTORYS", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
-    csv = df.drop(columns=['wiercenia', 'orientacja']).to_csv(index=False).encode('utf-8-sig')
+    # FIX: BEZPIECZNE WYŚWIETLANIE TABELI (ArrowInvalid Fix)
+    df_display = df.drop(columns=['wiercenia', 'orientacja']) # Kopia bez kłopotliwej kolumny
+    csv = df_display.to_csv(index=False).encode('utf-8-sig')
+    
     st.download_button("💾 Pobierz CSV", csv, f"{KOD_PROJEKTU}.csv", "text/csv")
-    st.dataframe(df)
+    st.dataframe(df_display, width=None) # Wyświetlamy bezpieczną kopię
 
 with tabs[1]:
     if st.button("📄 PDF"):
@@ -647,11 +619,8 @@ with tabs[1]:
                 if el['wiercenia']:
                     fig_tab = rysuj_tabele_strona(el['ID'], el['Nazwa'], el['wiercenia'])
                     pdf.savefig(fig_tab, orientation='portrait'); plt.close(fig_tab)
-            
-            # Dodanie instrukcji na końcu PDF
             fig_instr = rysuj_instrukcje_pdf(instrukcja_tekst)
             pdf.savefig(fig_instr, orientation='portrait'); plt.close(fig_instr)
-
         st.session_state['pdf_ready'] = buf
     if st.session_state['pdf_ready']: st.download_button("Pobierz", st.session_state['pdf_ready'].getvalue(), "projekt.pdf", "application/pdf")
     
@@ -667,42 +636,31 @@ with tabs[3]:
     st.markdown("### Szacunkowy Kosztorys")
     df_koszt = df.copy()
     df_koszt['Powierzchnia [m2]'] = (df_koszt['Szerokość [mm]'] * df_koszt['Wysokość [mm]']) / 1000000 
-    
     grupy = df_koszt.groupby('Materiał')['Powierzchnia [m2]'].sum().reset_index()
-    
     koszt_calkowity = 0
     st.write("#### Materiały Płytowe")
     for index, row in grupy.iterrows():
-        mat = row['Materiał']
-        area = row['Powierzchnia [m2]']
-        cena_jedn = 0
+        mat = row['Materiał']; area = row['Powierzchnia [m2]']; cena_jedn = 0
         if "KORPUS" in mat: cena_jedn = st.session_state['cena_korpus']
         elif "FRONT" in mat: cena_jedn = st.session_state['cena_front']
         elif "HDF" in mat: cena_jedn = st.session_state['cena_hdf']
-        
-        koszt = area * cena_jedn
-        koszt_calkowity += koszt
+        koszt = area * cena_jedn; koszt_calkowity += koszt
         st.write(f"- **{mat}**: {area:.2f} m² x {cena_jedn} zł = {koszt:.2f} zł")
-        
     st.write("#### Obrzeża (Szacunek)")
     df_koszt['Obwód [m]'] = (2*df_koszt['Szerokość [mm]'] + 2*df_koszt['Wysokość [mm]']) / 1000
     mb_total = df_koszt['Obwód [m]'].sum()
     koszt_okl = mb_total * st.session_state['cena_okl']
     st.write(f"- Oklejanie: {mb_total:.1f} mb x {st.session_state['cena_okl']} zł = {koszt_okl:.2f} zł")
     koszt_calkowity += koszt_okl
-    
     st.metric("RAZEM (Netto materiał)", f"{koszt_calkowity:.2f} PLN")
 
 with tabs[4]:
     st.markdown("### Wizualizacja Rozkroju (Płyta 2800x2070)")
     el_korpus = [{"w": x['Szerokość [mm]'], "h": x['Wysokość [mm]'], "nazwa": x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]
-    
     if el_korpus:
         arkusze = rysuj_nesting(el_korpus)
         st.info(f"Potrzebujesz {len(arkusze)} płyt(y) na korpus.")
-        for i, ark in enumerate(arkusze):
-            st.pyplot(rysuj_arkusz(ark, i))
-    else:
-        st.warning("Brak elementów korpusu do rozkroju.")
+        for i, ark in enumerate(arkusze): st.pyplot(rysuj_arkusz(ark, i))
+    else: st.warning("Brak elementów korpusu do rozkroju.")
 
 with tabs[5]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ilosc_przegrod, st.session_state['moduly_sekcji'], szer_jednej_wneki, TYP_KONSTRUKCJI))
