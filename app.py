@@ -117,11 +117,21 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
 
 def get_unique_id(nazwa_baza, counts_dict, kod_projektu):
     key = nazwa_baza.upper().replace(" ", "_")
-    map_keys = {"BOK":"BOK", "WIENIEC":"WIENIEC", "PRZEGRODA":"PRZEGRODA", "FRONT":"FRONT", "PÓŁKA":"POLKA", "PLECY":"PLECY", "DRZWI":"DRZWI", "DNO":"DNO", "TYŁ":"TYL"}
-    key = map_keys.get(key, key)
-    current = counts_dict.get(key, 0) + 1
-    counts_dict[key] = current
-    return f"{kod_projektu}_{key}_{current}"
+    map_keys = {
+        "BOK LEWY": "BOK_L", "BOK PRAWY": "BOK_P", 
+        "WIENIEC GÓRNY": "WIENIEC_G", "WIENIEC DOLNY": "WIENIEC_D",
+        "PRZEGRODA": "PRZEG", "FRONT SZUFLADY": "FR_SZUF",
+        "DNO SZUFLADY": "DNO_SZUF", "TYŁ SZUFLADY": "TYL_SZUF"
+    }
+    short_key = key
+    for k, v in map_keys.items():
+        if key.startswith(k.replace(" ", "_")):
+            short_key = key.replace(k.replace(" ", "_"), v)
+            break
+            
+    current = counts_dict.get(short_key, 0) + 1
+    counts_dict[short_key] = current
+    return f"{kod_projektu}_{short_key}_{current}"
 
 def opisz_oklejanie(nazwa, szer_el, wys_el):
     n = nazwa.upper()
@@ -203,6 +213,7 @@ ILOSC_PRZEGROD = st.session_state['il_przegrod']
 N_SEKCJI = ILOSC_PRZEGROD + 1
 KOD_PROJEKTU = st.session_state['kod_pro'].upper().replace(" ", "_")
 
+# Wymiary pochodne
 if "Wpuszczane" in TYP_KONSTRUKCJI:
     WYS_BOKU = H_MEBLA
     SZER_WIENCA = W_MEBLA - (2 * GR_PLYTY) - (ILOSC_PRZEGROD * GR_PLYTY)
@@ -218,6 +229,7 @@ WYS_WEWNETRZNA = H_MEBLA - (2 * GR_PLYTY)
 GR_PLECOW = 18 if "18mm" in TYP_PLECOW else (16 if "16mm" in TYP_PLECOW else 0)
 GLEBOKOSC_WEWNETRZNA = D_MEBLA - GR_PLECOW
 
+# --- GENEROWANIE LISTY ELEMENTÓW ---
 lista_elementow = []
 counts_dict = {}
 
@@ -253,7 +265,7 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     
     for idx, mod in enumerate(moduly):
         h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
-        if idx > 0:
+        if idx > 0: # Wieniec środkowy
             yw = curr_y + GR_PLYTY/2; xt = 50.0 if is_mirror else D_MEBLA - 50.0
             otwory += [(x_f, yw, 'blue'), (xt, yw, 'blue')]; curr_y += GR_PLYTY
         
@@ -337,6 +349,7 @@ def oblicz_okucia():
     konf = 0; wkr = 0
     if "Wpuszczane" in TYP_KONSTRUKCJI: konf += 8 + (4 * ILOSC_PRZEGROD)
     if "Płyta" in TYP_PLECOW: konf += 4 * (int(H_MEBLA/400)+1)
+    
     for s_idx, moduly in st.session_state['moduly_sekcji'].items():
         if len(moduly) > 1: konf += 4 * (len(moduly) - 1)
         for m in moduly:
@@ -344,6 +357,7 @@ def oblicz_okucia():
             if m['typ'] == "Półki" and det.get('fixed'): konf += 4 * det.get('ilosc', 0)
             if m['typ'] == "Szuflady": wkr += 8 * det.get('ilosc', 0)
             if det.get('drzwi'): wkr += 8
+    
     if "HDF" in TYP_PLECOW: wkr += int((2*H_MEBLA + 2*W_MEBLA)/150)
     return konf, wkr
 
@@ -352,20 +366,28 @@ def generuj_instrukcje_tekst():
     steps = []
     steps.append(f"INSTRUKCJA MONTAŻU: {KOD_PROJEKTU}")
     steps.append("-" * 60)
+    steps.append("LISTA ZAKUPOWA (SZACUNEK):")
     steps.append(f"[ ] Konfirmaty: ok. {konf} szt.")
     steps.append(f"[ ] Wkręty 3.5x16: ok. {wkr} szt.")
     steps.append("-" * 60)
-    steps.append("KROK 0: TRASOWANIE I WIERCENIE")
-    steps.append("1. Przeanalizuj rysunki. Linie przerywane (X, Y) to osie otworów.")
-    steps.append("2. Punkty NIEBIESKIE: Konfirmaty (przelotowo fi 5/7mm).")
-    steps.append("3. Punkty CZERWONE/ZIELONE: Wkręty (nieprzelotowo fi 2-3mm).")
-    steps.append("KROK 1: MONTAŻ BOKÓW")
-    steps.append("1. Przykręć prowadnice i zawiasy do leżących boków.")
-    steps.append("KROK 2: KORPUS")
-    steps.append("1. Skręć wieńce z bokami.")
+    steps.append("KROK 0: TRASOWANIE")
+    steps.append("1. Weź Boki szafki i spójrz na rysunki w PDF.")
+    steps.append("2. Linie przerywane (Y:..., X:...) to linie pomocnicze.")
+    steps.append("3. Narysuj je ołówkiem na płycie. Przecięcia to punkty wiercenia.")
+    steps.append("")
+    steps.append("KROK 1: WIERCENIE")
+    steps.append("1. Punkty NIEBIESKIE (Konfirmaty): Wiertło fi 5mm/7mm (przelotowo przez bok).")
+    steps.append("2. Punkty CZERWONE/ZIELONE: Wiertło fi 2-3mm (napuntowanie) na głębokość 10mm.")
+    steps.append("")
+    steps.append("KROK 2: SKŁADANIE KORPUSU")
+    if "Wpuszczane" in TYP_KONSTRUKCJI:
+        steps.append("1. Skręć boki z wieńcami używając konfirmatów.")
+    else:
+        steps.append("1. Postaw boki na wieńcu dolnym. Skręć od dołu.")
+    steps.append("")
     steps.append("KROK 3: PLECY I FRONTY")
-    steps.append("1. Zamontuj plecy (kąty proste!).")
-    steps.append("2. Wsuń szuflady/drzwi.")
+    if "HDF" in TYP_PLECOW: steps.append("1. Wyrównaj przekątne. Przybij plecy HDF.")
+    steps.append("2. Zamontuj szuflady/drzwi.")
     return "\n".join(steps)
 
 def rysuj_instrukcje_pdf(tekst):
@@ -374,7 +396,6 @@ def rysuj_instrukcje_pdf(tekst):
     ax.text(0.05, 0.95, wrapped_text, ha='left', va='top', fontsize=10, family='monospace', linespacing=1.4)
     return fig
 
-# FIX: POPRAWIONE WYMIAROWANIE (FRONT ODSUNIĘTY DALEKO, Y-LABELS BLIŻEJ)
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
     fig, ax = plt.subplots(figsize=figsize)
@@ -473,8 +494,46 @@ def rysuj_tabele_strona(id_elementu, nazwa, otwory):
     else: ax.text(0.5, 0.5, "Brak otworów.", ha='center')
     return fig
 
+def rysuj_nesting(elementy, arkusz_w=2800, arkusz_h=2070, rzaz=4):
+    elementy_sorted = sorted(elementy, key=lambda x: x['h'], reverse=True)
+    sheets = []; current_sheet = {'w': arkusz_w, 'h': arkusz_h, 'placements': []}; shelf_x, shelf_y, shelf_h = 0, 0, 0
+    for el in elementy_sorted:
+        w, h = el['w'] + rzaz, el['h'] + rzaz
+        if shelf_x + w <= arkusz_w: current_sheet['placements'].append((shelf_x, shelf_y, el['w'], el['h'], el['nazwa'])); shelf_x += w; shelf_h = max(shelf_h, h)
+        else:
+            shelf_x = 0; shelf_y += shelf_h; shelf_h = h
+            if shelf_y + h <= arkusz_h: current_sheet['placements'].append((shelf_x, shelf_y, el['w'], el['h'], el['nazwa'])); shelf_x += w
+            else: sheets.append(current_sheet); current_sheet = {'w': arkusz_w, 'h': arkusz_h, 'placements': []}; shelf_x, shelf_y, shelf_h = 0, 0, h; current_sheet['placements'].append((shelf_x, shelf_y, el['w'], el['h'], el['nazwa'])); shelf_x += w
+    sheets.append(current_sheet); return sheets
+
+def rysuj_arkusz(sheet_data, idx):
+    fig, ax = plt.subplots(figsize=(10, 7)); ax.set_title(f"Arkusz {idx+1}", fontsize=14)
+    ax.add_patch(patches.Rectangle((0, 0), 2800, 2070, facecolor='#eee', edgecolor='black'))
+    for p in sheet_data['placements']: x, y, w, h, name = p; ax.add_patch(patches.Rectangle((x, y), w, h, facecolor='#d7ba9d', edgecolor='black', alpha=0.8)); ax.text(x + w/2, y + h/2, f"{name}\n{w:.0f}x{h:.0f}", ha='center', va='center', fontsize=6)
+    ax.set_xlim(0, 2800); ax.set_ylim(0, 2070); ax.set_aspect('equal'); ax.axis('off'); return fig
+
+def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr):
+    plt.close('all'); fig, ax = plt.subplots(figsize=(12, 8)); plt.title(f"WIZUALIZACJA: {st.session_state['kod_pro']}\n{typ_konstr}", fontsize=18, weight='bold', pad=20)
+    if "Wpuszczane" in typ_konstr: ax.add_patch(patches.Rectangle((0, 0), gr, h, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((w-gr, 0), gr, h, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((gr, h-gr), w-2*gr, gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((gr, 0), w-2*gr, gr, facecolor='#d7ba9d', edgecolor='black'))
+    else: ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((0, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((w-gr, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black'))
+    curr_x = gr; h_wew = h - 2*gr
+    for i in range(n_przeg + 1):
+        if i < n_przeg: ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3))
+        moduly = moduly_sekcji.get(i, [])
+        if moduly:
+            fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed'); auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto'); h_auto = (h_wew - fixed_sum) / max(1, auto_cnt); curr_y = gr
+            for idx, mod in enumerate(moduly):
+                if idx > 0: ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, gr, facecolor='#d7ba9d', edgecolor='black')); curr_y += gr
+                h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto; det = mod['detale']
+                if mod['typ'] == "Półki":
+                    n = det.get('ilosc', 1); gap = h_mod / (n + 1)
+                    for k in range(n): yp = curr_y + (k+1)*gap; ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, gr, color='#8B4513' if not det.get('fixed') else '#d7ba9d'))
+                ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_mod, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3)); curr_y += h_mod
+        curr_x += szer_wneki + gr
+    ax.set_xlim(-100, w + 100); ax.set_ylim(-100, h + 100); ax.set_aspect('equal'); ax.axis('off'); return fig
+
 # ==========================================
-# 7. WIDOK
+# 6. PREZENTACJA
 # ==========================================
 instrukcja_tekst = generuj_instrukcje_tekst()
 
