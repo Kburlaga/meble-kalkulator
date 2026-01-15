@@ -114,14 +114,10 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     st.toast(f"✅ Dodano {typ} do Sekcji {nr_sekcji+1}")
 
 # ==========================================
-# 3. RYSOWANIE (LINIE TRASERSKIE)
+# 3. RYSOWANIE (STRONA A: RYSUNEK)
 # ==========================================
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
-    
-    # Wykrywanie orientacji
-    is_landscape = szer > wys
-    
     fig, ax = plt.subplots(figsize=figsize)
     
     if "HDF" in nazwa: kolor_tla = '#d9d9d9'
@@ -132,31 +128,22 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
     ax.add_patch(rect)
     
-    table_data = []
-    
     if otwory:
-        # 1. RYSOWANIE LINII TRASERSKICH (SIATKA)
-        # Znajdź unikalne współrzędne X i Y
+        # Sortowanie musi być IDENTYCZNE jak w tabeli (Y potem X)
         unique_x = sorted(list(set([o[0] for o in otwory])))
         unique_y = sorted(list(set([o[1] for o in otwory])))
         
-        # Linie Poziome (Y)
+        # Linie Traserskie
         for y_line in unique_y:
-            # Rysuj linię przez całą szerokość
             ax.plot([-20, szer+20], [y_line, y_line], color='#666666', linestyle='--', linewidth=0.6, alpha=0.5, zorder=2)
-            # Opis na marginesie lewym
-            ax.text(-5, y_line, f"Y:{y_line:.0f}", ha='right', va='center', fontsize=7, color='#666666', alpha=0.8)
-            # Opis na marginesie prawym (dla wygody)
-            ax.text(szer+5, y_line, f"{y_line:.0f}", ha='left', va='center', fontsize=7, color='#666666', alpha=0.8)
+            ax.text(-5, y_line, f"Y:{y_line:.0f}", ha='right', va='center', fontsize=7, color='#666666')
+            ax.text(szer+5, y_line, f"{y_line:.0f}", ha='left', va='center', fontsize=7, color='#666666')
 
-        # Linie Pionowe (X)
         for x_line in unique_x:
-            # Rysuj linię przez całą wysokość
             ax.plot([x_line, x_line], [-20, wys+20], color='#666666', linestyle='--', linewidth=0.6, alpha=0.5, zorder=2)
-            # Opis na dole
-            ax.text(x_line, -15, f"{x_line:.0f}", ha='center', va='top', fontsize=7, color='#666666', alpha=0.8, rotation=90)
+            ax.text(x_line, -15, f"{x_line:.0f}", ha='center', va='top', fontsize=7, color='#666666', rotation=90)
 
-        # 2. RYSOWANIE OTWORÓW
+        # Otwory
         otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
         
         for i, otw in enumerate(otwory_sorted):
@@ -164,64 +151,20 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
             kolor_kod = otw[2] if len(otw) > 2 else 'red'
             nr = i + 1
             
-            typ_otworu = "?"
             if kolor_kod == 'blue': 
-                typ_otworu = "Konfirmat"
                 ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='white', linewidth=2, zorder=20))
                 ax.plot([x-3, x+3], [y, y], color='blue', linewidth=1); ax.plot([x, x], [y-3, y+3], color='blue', linewidth=1)
             elif kolor_kod == 'red': 
-                typ_otworu = "Prowadnica"
                 ax.add_patch(patches.Circle((x, y), radius=4, color='red', zorder=20))
             elif kolor_kod == 'green': 
-                typ_otworu = "Podpórka/Zawias"
                 r = 17.5 if "Front" in nazwa else 4
                 ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
 
-            # Numer w kółku
+            # Tylko numer w kółku na rysunku (czystość)
             ax.add_patch(patches.Circle((x + 12, y + 12), radius=9, color='black', zorder=40))
             ax.text(x + 12, y + 12, str(nr), color='white', ha='center', va='center', fontsize=9, weight='bold', zorder=41)
-            
-            table_data.append([str(nr), f"{x:.1f}", f"{y:.1f}", typ_otworu])
 
-        # 3. TABELA (DYNAMICZNA)
-        if table_data:
-            num_rows = len(table_data) + 1 
-            row_height_factor = 0.035 if not is_landscape else 0.05
-            table_height_fraction = min(num_rows * row_height_factor, 0.45) 
-            margin_bottom = table_height_fraction + 0.1
-            
-            col_labels = ["Nr", "X", "Y", "Typ"]
-            col_widths = [0.1, 0.25, 0.25, 0.4] 
-            
-            if is_landscape:
-                plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=margin_bottom)
-                ax_height = 0.90 - margin_bottom
-                if ax_height > 0:
-                    bbox_h = table_height_fraction / ax_height
-                    bbox = [0.0, -bbox_h - 0.15, 1.0, bbox_h]
-                else:
-                    bbox = [0, -0.5, 1, 0.5]
-            else:
-                plt.subplots_adjust(left=0.1, right=0.90, top=0.95, bottom=margin_bottom)
-                ax_height = 0.95 - margin_bottom
-                if ax_height > 0:
-                    bbox_h = table_height_fraction / ax_height
-                    bbox = [0.0, -bbox_h - 0.1, 0.9, bbox_h]
-                else:
-                    bbox = [0, -0.5, 0.9, 0.5]
-
-            table = ax.table(cellText=table_data, colLabels=col_labels, loc='center', bbox=bbox, cellLoc='center', colWidths=col_widths)
-            table.auto_set_font_size(False)
-            table.set_fontsize(10)
-            
-            for (row, col), cell in table.get_celld().items():
-                if row == 0:
-                    cell.set_text_props(weight='bold')
-                    cell.set_facecolor('#f0f0f0')
-
-    else:
-        plt.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05)
-
+    # Orientacja i Wymiary
     offset_front = 60 
     if "Plecy" not in nazwa:
         if orientacja_frontu == 'L':
@@ -243,6 +186,57 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     ax.set_ylim(-margin, wys + margin)
     ax.set_aspect('equal')
     ax.axis('off')
+    return fig
+
+# ==========================================
+# 3b. RYSOWANIE (STRONA B: TABELA)
+# ==========================================
+def rysuj_tabele_strona(id_elementu, nazwa, otwory):
+    """Generuje osobną stronę A4 tylko z tabelą wierceń"""
+    plt.close('all')
+    fig, ax = plt.subplots(figsize=(8.27, 11.69)) # A4 Portrait
+    ax.axis('off')
+    
+    # Nagłówek strony
+    ax.text(0.5, 0.95, f"TABELA WIERCEŃ: {id_elementu}", ha='center', fontsize=16, weight='bold')
+    ax.text(0.5, 0.92, f"Element: {nazwa}", ha='center', fontsize=12, color='#555')
+    
+    table_data = []
+    otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
+    
+    for i, otw in enumerate(otwory_sorted):
+        x, y = otw[0], otw[1]
+        kolor_kod = otw[2] if len(otw) > 2 else 'red'
+        nr = i + 1
+        
+        typ_otworu = "Inny"
+        if kolor_kod == 'blue': typ_otworu = "Konfirmat"
+        elif kolor_kod == 'red': typ_otworu = "Prowadnica"
+        elif kolor_kod == 'green': typ_otworu = "Podpórka/Zawias"
+        
+        table_data.append([str(nr), f"{x:.1f}", f"{y:.1f}", typ_otworu])
+    
+    if table_data:
+        col_labels = ["Nr", "X [mm]", "Y [mm]", "Typ Otworu"]
+        col_widths = [0.1, 0.2, 0.2, 0.5]
+        
+        # Rysowanie tabeli
+        table = ax.table(cellText=table_data, colLabels=col_labels, loc='top', bbox=[0.1, 0.05, 0.8, 0.85], cellLoc='center', colWidths=col_widths)
+        
+        table.auto_set_font_size(False)
+        table.set_fontsize(11)
+        
+        # Stylizacja
+        for (row, col), cell in table.get_celld().items():
+            cell.set_height(0.04) # Wysokość wiersza
+            if row == 0:
+                cell.set_text_props(weight='bold', color='white')
+                cell.set_facecolor('#333333')
+            elif row % 2 == 0:
+                cell.set_facecolor('#f9f9f9')
+    else:
+        ax.text(0.5, 0.5, "Brak otworów w tym elemencie.", ha='center')
+        
     return fig
 
 def rysuj_nesting(elementy, arkusz_w=2800, arkusz_h=2070, rzaz=4):
@@ -556,11 +550,31 @@ with tabs[1]:
             with PdfPages(buf) as pdf:
                 for el in lista_elementow:
                     plt.clf()
+                    
+                    # Strona 1: Rysunek
                     fs = (11.69, 8.27) if el['Szerokość [mm]'] > el['Wysokość [mm]'] else (8.27, 11.69)
                     orient = 'landscape' if el['Szerokość [mm]'] > el['Wysokość [mm]'] else 'portrait'
-                    fig = rysuj_element(el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], el['wiercenia'], el['orientacja'], kolor_tla='#e6ccb3', figsize=fs)
-                    pdf.savefig(fig, orientation=orient); plt.close(fig)
+                    
+                    fig = rysuj_element(
+                        szer=el['Szerokość [mm]'], 
+                        wys=el['Wysokość [mm]'], 
+                        id_elementu=el['ID'], 
+                        nazwa=el['Nazwa'], 
+                        otwory=el['wiercenia'], 
+                        orientacja_frontu=el['orientacja'],
+                        figsize=fs
+                    )
+                    pdf.savefig(fig, orientation=orient)
+                    plt.close(fig)
+                    
+                    # Strona 2: Tabela (tylko jeśli są otwory)
+                    if el['wiercenia']:
+                        fig_tab = rysuj_tabele_strona(el['ID'], el['Nazwa'], el['wiercenia'])
+                        pdf.savefig(fig_tab, orientation='portrait') # Tabela zawsze A4 Pionowo
+                        plt.close(fig_tab)
+
             st.session_state['pdf_ready'] = buf
+        
         if st.session_state['pdf_ready']:
             c1.download_button("💾 Pobierz PDF", st.session_state['pdf_ready'].getvalue(), "projekt.pdf", "application/pdf")
         
