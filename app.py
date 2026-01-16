@@ -105,8 +105,10 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     if nr_sekcji not in current_data: current_data[nr_sekcji] = []
     detale = {'ilosc': int(ilosc), 'drzwi': drzwi, 'fixed': polki_stale}
     nowy_modul = {
-        'typ': typ, 'wys_mode': 'auto' if "AUTO" in tryb_wys else 'fixed',
-        'wys_mm': float(wys_mm) if "Fixed" in tryb_wys else 0, 'detale': detale 
+        'typ': typ,
+        'wys_mode': 'auto' if "AUTO" in tryb_wys else 'fixed',
+        'wys_mm': float(wys_mm) if "Fixed" in tryb_wys else 0,
+        'detale': detale 
     }
     current_data[nr_sekcji].append(nowy_modul)
     st.session_state['moduly_sekcji'] = current_data
@@ -115,13 +117,11 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
 def get_unique_id(nazwa_baza, counts_dict, kod_projektu):
     key = nazwa_baza.upper().replace(" ", "_")
     map_keys = {"BOK LEWY": "BOK_L", "BOK PRAWY": "BOK_P", "WIENIEC GÓRNY": "WIENIEC_G", "WIENIEC DOLNY": "WIENIEC_D", "PRZEGRODA": "PRZEG", "FRONT SZUFLADY": "FR_SZUF", "DNO SZUFLADY": "DNO_SZUF", "TYŁ SZUFLADY": "TYL_SZUF"}
-    # Sprawdź czy nazwa zawiera klucz (dla dynamicznych nazw z numerami)
     short_key = key
     for k_map, v_map in map_keys.items():
         if k_map.replace(" ", "_") in key:
             short_key = key.replace(k_map.replace(" ", "_"), v_map)
             break
-            
     current = counts_dict.get(short_key, 0) + 1
     counts_dict[short_key] = current
     return f"{kod_projektu}_{short_key}"
@@ -129,7 +129,8 @@ def get_unique_id(nazwa_baza, counts_dict, kod_projektu):
 def opisz_oklejanie(nazwa, szer_el, wys_el):
     n = nazwa.upper()
     if "FRONT" in n or "DRZWI" in n: return "4 krawędzie (2mm)"
-    elif "WIENIEC" in n or "PÓŁKA" in n or "PRZEGRODA" in n: return "1 Długa (Przód)" if szer_el >= wys_el else "1 Krótka (Przód)"
+    elif "WIENIEC" in n or "PÓŁKA" in n or "PRZEGRODA" in n:
+        return "1 Długa (Przód)" if szer_el >= wys_el else "1 Krótka (Przód)"
     elif "BOK" in n: return "1 Długa + 2 Krótkie (Przód+Góra+Dół)"
     return "Brak" if "DNO" in n or "TYŁ" in n or "PLECY" in n else "Wg uznania"
 
@@ -149,21 +150,31 @@ with st.sidebar:
     st.selectbox("Plecy", ["HDF 3mm (Nakładane)", "Płyta 18mm (Wpuszczana)", "Płyta 16mm (Wpuszczana)", "Brak"], key="typ_plecow")
     c1, c2 = st.columns(2); c1.number_input("Wysokość", key="h_mebla"); c2.number_input("Szerokość", key="w_mebla")
     c1.number_input("Głębokość", key="d_mebla"); c2.number_input("Grubość", key="gr_plyty"); st.number_input("Przegrody", key="il_przegrod")
-    
+    with st.expander("💰 Ceny"):
+        st.number_input("Płyta Korpus", value=50.0, key='cena_korpus')
+        st.number_input("Płyta Front", value=70.0, key='cena_front')
+        st.number_input("HDF", value=15.0, key='cena_hdf')
+        st.number_input("Oklejanie (zł/mb)", value=2.0, key='cena_okl')
     st.markdown("### 2. Moduły")
-    tabs = st.tabs([f"Sekcja {i+1}" for i in range(st.session_state['il_przegrod']+1)])
-    for i, tab in enumerate(tabs):
+    aktualna_ilosc_sekcji = st.session_state['il_przegrod'] + 1
+    tabs_sekcji = st.tabs([f"Sekcja {i+1}" for i in range(aktualna_ilosc_sekcji)])
+    for i, tab in enumerate(tabs_sekcji):
         with tab:
-            ms = st.session_state['moduly_sekcji'].get(i, [])
-            if ms:
-                for idx, mod in enumerate(ms):
+            m_sekcji = st.session_state['moduly_sekcji'].get(i, [])
+            if m_sekcji:
+                for idx, mod in enumerate(m_sekcji):
                     c_del, c_info = st.columns([1, 4])
                     if c_del.button("X", key=f"del_{i}_{idx}"): usun_modul(i, idx); st.rerun()
                     c_info.markdown(f"{mod['typ']}")
-            with st.form(f"f{i}"):
-                t = st.selectbox("Typ", ["Półki", "Szuflady", "Drążek", "Pusta"])
-                if st.form_submit_button("Dodaj"): dodaj_modul_akcja(i, t, "AUTO", 0, 1, False, False); st.rerun()
-    
+            with st.form(key=f"form_add_{i}"):
+                f_typ = st.selectbox("Typ", ["Półki", "Szuflady", "Drążek", "Pusta"])
+                f_tryb = st.selectbox("Wysokość", ["Fixed (mm)", "AUTO"])
+                f_wys = st.number_input("Wysokość (mm)", 100, 2000, 600)
+                f_il = st.number_input("Ilość", 1, 10, 1)
+                c_a, c_b = st.columns(2)
+                f_d = c_a.checkbox("Drzwi?"); f_s = False
+                if f_typ == "Półki": f_s = c_b.checkbox("Stałe?")
+                if st.form_submit_button("Dodaj"): dodaj_modul_akcja(i, f_typ, f_tryb, f_wys, f_il, f_d, f_s); st.rerun()
     st.markdown("---"); c_s1, c_s2 = st.columns(2)
     sys_k = c_s1.selectbox("Prowadnice", list(BAZA_SYSTEMOW.keys()))
     zaw_k = c_s2.selectbox("Zawiasy", list(BAZA_ZAWIASOW.keys()))
@@ -294,7 +305,7 @@ def rysuj_instrukcje_pdf(tekst):
     ax.text(0.05, 0.95, "\n".join([textwrap.fill(l, 85) for l in tekst.split('\n')]), ha='left', va='top', fontsize=10, family='monospace')
     return fig
 
-# FIX: FRONT BARDZO DALEKO, RYSUNEK SKALOWANY
+# FIX: FRONT BARDZO DALEKO (250mm), DUŻE MARGINESY (350mm)
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all'); fig, ax = plt.subplots(figsize=figsize)
     if "HDF" in nazwa: kolor_tla = '#d9d9d9'
@@ -427,6 +438,6 @@ with tabs[2]: st.text(generuj_instrukcje_tekst())
 with tabs[3]:
     st.write(f"RAZEM (Płyta): {sum(x['Szerokość [mm]']*x['Wysokość [mm]'] for x in lista_elementow if 'KORPUS' in x['Materiał'])/1000000:.2f} m2")
 with tabs[4]:
-    ek = [{"w":x['Szerokość [mm]', "h"]:x['Wysokość [mm]'], "nazwa":x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]
+    ek = [{"w":x['Szerokość [mm]'], "h":x['Wysokość [mm]'], "nazwa":x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]
     if ek: st.pyplot(rysuj_nesting([{"w":x['Szerokość [mm]'], "h":x['Wysokość [mm]'], "nazwa":x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]))
 with tabs[5]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ILOSC_PRZEGROD, st.session_state['moduly_sekcji'], SZER_JEDNEJ_WNEKI, TYP_KONSTRUKCJI))
