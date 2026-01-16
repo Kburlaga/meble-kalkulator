@@ -7,6 +7,7 @@ import textwrap
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.backends.backend_pdf import PdfPages
+import plotly.graph_objects as go # NOWOŚĆ: Biblioteka do 3D
 
 # ==========================================
 # KONFIGURACJA STRONY
@@ -343,7 +344,115 @@ run_generator()
 df = pd.DataFrame(lista_elementow)
 
 # ==========================================
-# 5. GENEROWANIE INSTRUKCJI I GRAFIKI
+# 5. GENEROWANIE 3D (NOWOŚĆ: PLOTLY)
+# ==========================================
+def stworz_bryle(x, y, z, dx, dy, dz, color, opacity=1.0, name=""):
+    return go.Mesh3d(
+        x=[x, x+dx, x+dx, x, x, x+dx, x+dx, x],
+        y=[y, y, y+dy, y+dy, y, y, y+dy, y+dy],
+        z=[z, z, z, z, z+dz, z+dz, z+dz, z+dz],
+        i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+        j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+        k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
+        color=color, opacity=opacity, name=name, showscale=False, hoverinfo='name'
+    )
+
+def generuj_widok_3d():
+    fig = go.Figure()
+    
+    # Kolory
+    c_korpus = '#d2b48c' # Tan
+    c_front = '#8b4513'  # SaddleBrown
+    c_back = '#a9a9a9'   # DarkGray
+    
+    # 1. Boki
+    # Lewy (X=0)
+    fig.add_trace(stworz_bryle(0, 0, 0, GR_PLYTY, D_MEBLA, WYS_BOKU, c_korpus, name="Bok Lewy"))
+    # Prawy (X=Max)
+    fig.add_trace(stworz_bryle(W_MEBLA-GR_PLYTY, 0, 0, GR_PLYTY, D_MEBLA, WYS_BOKU, c_korpus, name="Bok Prawy"))
+    
+    # 2. Wieńce (Logic Nakładane vs Wpuszczane)
+    if "Wpuszczane" in TYP_KONSTRUKCJI:
+        # Wieniec dolny (nad podłogą, między bokami)
+        fig.add_trace(stworz_bryle(GR_PLYTY, 0, GR_PLYTY, SZER_WIENCA, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, c_korpus, name="Wieniec Dolny"))
+        # Wieniec górny (pod sufitem, między bokami)
+        fig.add_trace(stworz_bryle(GR_PLYTY, 0, H_MEBLA-2*GR_PLYTY, SZER_WIENCA, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, c_korpus, name="Wieniec Górny"))
+    else:
+        # Wieniec dolny (pod bokami, na całą szerokość)
+        fig.add_trace(stworz_bryle(0, 0, 0, W_MEBLA, D_MEBLA, GR_PLYTY, c_korpus, name="Wieniec Dolny"))
+        # Wieniec górny (na bokach, na całą szerokość)
+        fig.add_trace(stworz_bryle(0, 0, H_MEBLA-GR_PLYTY, W_MEBLA, D_MEBLA, GR_PLYTY, c_korpus, name="Wieniec Górny"))
+
+    # 3. Plecy
+    if GR_PLECOW > 0 or "HDF" in TYP_PLECOW:
+        th_plecy = 3 if "HDF" in TYP_PLECOW else GR_PLECOW
+        # Plecy są zawsze z tyłu (Y=Max lub Y=0 w zależności od układu - tu przyjmijmy Y=D_MEBLA to tył, a Y=0 to front? 
+        # W 2D mieliśmy Y jako wysokość... W 3D: Z=Wysokość, X=Szerokość, Y=Głębokość.
+        # Przyjmijmy Y=0 to TYŁ, Y=D_MEBLA to FRONT.
+        fig.add_trace(stworz_bryle(0, 0, 0, W_MEBLA, th_plecy, H_MEBLA, c_back, name="Plecy"))
+
+    # 4. Wnętrze (Przegrody i Półki)
+    current_x = GR_PLYTY
+    
+    for i in range(N_SEKCJI):
+        # Przegroda (jeśli nie ostatnia sekcja)
+        if i < ILOSC_PRZEGROD:
+            fig.add_trace(stworz_bryle(current_x + SZER_JEDNEJ_WNEKI, 0, GR_PLYTY, GR_PLYTY, GLEBOKOSC_WEWNETRZNA, WYS_WEWNETRZNA, c_korpus, name=f"Przegroda {i+1}"))
+        
+        moduly = st.session_state['moduly_sekcji'].get(i, [])
+        
+        # Obliczenie wysokości (uproszczone jak w 2D)
+        fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
+        auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
+        h_auto = (WYS_WEWNETRZNA - fixed_sum) / max(1, auto_cnt)
+        
+        current_z = GR_PLYTY if "Wpuszczane" in TYP_KONSTRUKCJI else 2*GR_PLYTY # Start Z
+        
+        for m in moduly:
+            h_mod = m['wys_mm'] if m['wys_mode'] == 'fixed' else h_auto
+            
+            # Wieniec/Półka pod modułem (jeśli nie pierwszy)
+            # (Pominięte dla uproszczenia w tym widoku, skupiamy się na wypełnieniu)
+            
+            # ELEMENTY WEWNĘTRZNE
+            if m['typ'] == "Półki":
+                n = m['detale'].get('ilosc', 1)
+                gap = h_mod / (n + 1)
+                for k in range(n):
+                    z_shelf = current_z + (k+1)*gap
+                    # Półka
+                    fig.add_trace(stworz_bryle(current_x, GR_PLECOW, z_shelf, SZER_JEDNEJ_WNEKI, GLEBOKOSC_WEWNETRZNA-20, GR_PLYTY, c_korpus, name="Półka"))
+            
+            elif m['typ'] == "Szuflady":
+                n = m['detale'].get('ilosc', 1)
+                h_f = (h_mod - (n-1)*3) / n
+                for k in range(n):
+                    z_draw = current_z + k*(h_f+3)
+                    # Front szuflady (Y=Głębokość, czyli z przodu)
+                    fig.add_trace(stworz_bryle(current_x, D_MEBLA, z_draw, SZER_JEDNEJ_WNEKI, GR_PLYTY, h_f, c_front, opacity=0.8, name="Front Szuflady"))
+            
+            # Drzwi (na cały moduł)
+            if m['detale'].get('drzwi'):
+                 fig.add_trace(stworz_bryle(current_x, D_MEBLA, current_z, SZER_JEDNEJ_WNEKI, GR_PLYTY, h_mod, c_front, opacity=0.7, name="Drzwi"))
+
+            current_z += h_mod
+        
+        current_x += SZER_JEDNEJ_WNEKI + GR_PLYTY
+
+    # Ustawienia kamery i osi
+    fig.update_layout(
+        scene=dict(
+            xaxis=dict(title="Szerokość (X)"),
+            yaxis=dict(title="Głębokość (Y)"),
+            zaxis=dict(title="Wysokość (Z)"),
+            aspectmode='data' # Zachowanie proporcji 1:1:1
+        ),
+        margin=dict(r=0, l=0, b=0, t=0)
+    )
+    return fig
+
+# ==========================================
+# 6. GENEROWANIE INSTRUKCJI I GRAFIKI
 # ==========================================
 def oblicz_okucia():
     konf = 0; wkr = 0
@@ -396,7 +505,6 @@ def rysuj_instrukcje_pdf(tekst):
     ax.text(0.05, 0.95, wrapped_text, ha='left', va='top', fontsize=10, family='monospace', linespacing=1.4)
     return fig
 
-# FIX: POPRAWIONE WYMIAROWANIE (FRONT ODSUNIĘTY DALEKO, Y-LABELS BLIŻEJ)
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
     fig, ax = plt.subplots(figsize=figsize)
@@ -418,7 +526,6 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
         # Linie Y (Poziome)
         for y_line in unique_y:
             ax.plot([-500, szer+500], [y_line, y_line], color='#666666', linestyle='--', linewidth=0.5, alpha=0.5, zorder=2)
-            # FIX: Etykiety Y blisko krawędzi (25mm)
             ax.text(-25, y_line, f"Y:{y_line:.0f}", ha='right', va='center', fontsize=7, color='black')
             ax.text(szer+25, y_line, f"{y_line:.0f}", ha='left', va='center', fontsize=7, color='black')
 
@@ -581,11 +688,11 @@ def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr
     ax.set_xlim(-100, w + 100); ax.set_ylim(-100, h + 100); ax.set_aspect('equal'); ax.axis('off'); return fig
 
 # ==========================================
-# 6. PREZENTACJA
+# 7. WIDOK
 # ==========================================
 instrukcja_tekst = generuj_instrukcje_tekst()
 
-tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🛠️ INSTRUKCJA", "💰 KOSZTORYS", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
+tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🧊 3D", "🛠️ INSTRUKCJA", "💰 KOSZTORYS", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
     df_disp = df.drop(columns=['wiercenia', 'orientacja'])
@@ -614,8 +721,14 @@ with tabs[1]:
     it = next(x for x in lista_elementow if x['ID'] == sel)
     st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['wiercenia'], it['orientacja']))
 
-with tabs[2]: st.markdown("### Instrukcja Montażu"); st.text(instrukcja_tekst)
-with tabs[3]:
+with tabs[2]:
+    if GRAFIKA_DOSTEPNA:
+        st.plotly_chart(generuj_widok_3d(), use_container_width=True)
+    else:
+        st.warning("Widok 3D wymaga biblioteki plotly.")
+
+with tabs[3]: st.markdown("### Instrukcja Montażu"); st.text(instrukcja_tekst)
+with tabs[4]:
     st.markdown("### Szacunkowy Kosztorys")
     df_koszt = df.copy()
     df_koszt['Powierzchnia [m2]'] = (df_koszt['Szerokość [mm]'] * df_koszt['Wysokość [mm]']) / 1000000 
@@ -637,7 +750,7 @@ with tabs[3]:
     koszt_calkowity += koszt_okl
     st.metric("RAZEM (Netto materiał)", f"{koszt_calkowity:.2f} PLN")
 
-with tabs[4]:
+with tabs[5]:
     st.markdown("### Wizualizacja Rozkroju (Płyta 2800x2070)")
     el_korpus = [{"w": x['Szerokość [mm]'], "h": x['Wysokość [mm]'], "nazwa": x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]
     if el_korpus:
@@ -646,4 +759,4 @@ with tabs[4]:
         for i, ark in enumerate(arkusze): st.pyplot(rysuj_arkusz(ark, i))
     else: st.warning("Brak elementów korpusu do rozkroju.")
 
-with tabs[5]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ILOSC_PRZEGROD, st.session_state['moduly_sekcji'], SZER_JEDNEJ_WNEKI, TYP_KONSTRUKCJI))
+with tabs[6]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ILOSC_PRZEGROD, st.session_state['moduly_sekcji'], SZER_JEDNEJ_WNEKI, TYP_KONSTRUKCJI))
