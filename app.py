@@ -396,6 +396,7 @@ def rysuj_instrukcje_pdf(tekst):
     ax.text(0.05, 0.95, wrapped_text, ha='left', va='top', fontsize=10, family='monospace', linespacing=1.4)
     return fig
 
+# FIX: POPRAWIONE WYMIAROWANIE (FRONT ODSUNIĘTY DALEKO, Y-LABELS BLIŻEJ)
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
     plt.close('all')
     fig, ax = plt.subplots(figsize=figsize)
@@ -494,6 +495,7 @@ def rysuj_tabele_strona(id_elementu, nazwa, otwory):
     else: ax.text(0.5, 0.5, "Brak otworów.", ha='center')
     return fig
 
+# FIX: POPRAWIONY RYSUNEK ROZKROJU (LEGENDA NA DOLE ZAMIAST TEKSTU NA RYSUNKU)
 def rysuj_nesting(elementy, arkusz_w=2800, arkusz_h=2070, rzaz=4):
     elementy_sorted = sorted(elementy, key=lambda x: x['h'], reverse=True)
     sheets = []; current_sheet = {'w': arkusz_w, 'h': arkusz_h, 'placements': []}; shelf_x, shelf_y, shelf_h = 0, 0, 0
@@ -507,10 +509,56 @@ def rysuj_nesting(elementy, arkusz_w=2800, arkusz_h=2070, rzaz=4):
     sheets.append(current_sheet); return sheets
 
 def rysuj_arkusz(sheet_data, idx):
-    fig, ax = plt.subplots(figsize=(10, 7)); ax.set_title(f"Arkusz {idx+1}", fontsize=14)
+    # Dzielimy wykres: Góra (80%) to rysunek, Dół (20%) to legenda
+    fig = plt.figure(figsize=(10, 10))
+    gs = fig.add_gridspec(2, 1, height_ratios=[4, 1])
+    ax = fig.add_subplot(gs[0])
+    ax_leg = fig.add_subplot(gs[1]); ax_leg.axis('off')
+
+    ax.set_title(f"Arkusz {idx+1} (2800x2070 mm)", fontsize=14)
     ax.add_patch(patches.Rectangle((0, 0), 2800, 2070, facecolor='#eee', edgecolor='black'))
-    for p in sheet_data['placements']: x, y, w, h, name = p; ax.add_patch(patches.Rectangle((x, y), w, h, facecolor='#d7ba9d', edgecolor='black', alpha=0.8)); ax.text(x + w/2, y + h/2, f"{name}\n{w:.0f}x{h:.0f}", ha='center', va='center', fontsize=6)
-    ax.set_xlim(0, 2800); ax.set_ylim(0, 2070); ax.set_aspect('equal'); ax.axis('off'); return fig
+    
+    legend_data = []
+    
+    for i, p in enumerate(sheet_data['placements']):
+        x, y, w, h, name = p
+        
+        # Rysujemy formatkę
+        ax.add_patch(patches.Rectangle((x, y), w, h, facecolor='#d7ba9d', edgecolor='black', alpha=0.9))
+        
+        # Etykieta to tylko numer ID (np. #1)
+        short_id = f"#{i+1}"
+        
+        # Logika obracania tekstu jeśli formatka jest wąska
+        rot = 90 if h > w else 0
+        fontsize = 8 if min(w, h) > 100 else 5
+        
+        ax.text(x + w/2, y + h/2, short_id, ha='center', va='center', fontsize=fontsize, rotation=rot, weight='bold')
+        
+        # Dodajemy do legendy
+        legend_data.append([short_id, f"{w}x{h}", name])
+
+    ax.set_xlim(0, 2800); ax.set_ylim(0, 2070); ax.set_aspect('equal'); ax.axis('off')
+
+    # Rysujemy tabelę legendy pod spodem
+    if legend_data:
+        col_labels = ["ID", "Wymiar", "Nazwa"]
+        col_widths = [0.1, 0.2, 0.7]
+        table = ax_leg.table(cellText=legend_data, colLabels=col_labels, loc='center', cellLoc='left', colWidths=col_widths)
+        table.auto_set_font_size(False); table.set_fontsize(9); table.scale(1, 1.2)
+
+    return fig
+
+def generuj_szablon_a4(element, rog):
+    plt.close('all'); fig, ax = plt.subplots(figsize=(8.27, 11.69)); szer, wys = element['Szerokość [mm]'], element['Wysokość [mm]']; otwory = element['wiercenia']; plt.title(f"SZABLON: {element['ID']} ({rog})", fontsize=14, pad=10)
+    ax.add_patch(patches.Rectangle((0, 0), szer, wys, linewidth=3, edgecolor='black', facecolor='#eee', zorder=1))
+    for otw in otwory: x, y = otw[0], otw[1]; kolor = otw[2] if len(otw) > 2 else 'black'; ax.plot([x-10, x+10], [y, y], color=kolor, linewidth=1.5, zorder=10); ax.plot([x, x], [y-10, y+10], color=kolor, linewidth=1.5, zorder=10); ax.text(x+5, y+5, f"({x:.0f}, {y:.0f})", fontsize=9, color=kolor, zorder=20, weight='bold')
+    a4_w, a4_h, m = 210, 297, 10
+    if "LD" in rog: ax.set_xlim(-m, a4_w-m); ax.set_ylim(-m, a4_h-m)
+    elif "LG" in rog: ax.set_xlim(-m, a4_w-m); ax.set_ylim(wys-a4_h+m, wys+m)
+    elif "PD" in rog: ax.set_xlim(szer-a4_w+m, szer+m); ax.set_ylim(-m, a4_h-m)
+    elif "PG" in rog: ax.set_xlim(szer-a4_w+m, szer+m); ax.set_ylim(wys-a4_h+m, wys+m)
+    ax.set_aspect('equal'); ax.grid(True, linestyle=':', alpha=0.5); return fig
 
 def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr):
     plt.close('all'); fig, ax = plt.subplots(figsize=(12, 8)); plt.title(f"WIZUALIZACJA: {st.session_state['kod_pro']}\n{typ_konstr}", fontsize=18, weight='bold', pad=20)
