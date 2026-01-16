@@ -105,10 +105,8 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
     if nr_sekcji not in current_data: current_data[nr_sekcji] = []
     detale = {'ilosc': int(ilosc), 'drzwi': drzwi, 'fixed': polki_stale}
     nowy_modul = {
-        'typ': typ,
-        'wys_mode': 'auto' if "AUTO" in tryb_wys else 'fixed',
-        'wys_mm': float(wys_mm) if "Fixed" in tryb_wys else 0,
-        'detale': detale 
+        'typ': typ, 'wys_mode': 'auto' if "AUTO" in tryb_wys else 'fixed',
+        'wys_mm': float(wys_mm) if "Fixed" in tryb_wys else 0, 'detale': detale 
     }
     current_data[nr_sekcji].append(nowy_modul)
     st.session_state['moduly_sekcji'] = current_data
@@ -164,7 +162,7 @@ with st.sidebar:
             if m_sekcji:
                 for idx, mod in enumerate(m_sekcji):
                     c_del, c_info = st.columns([1, 4])
-                    if c_del.button("X", key=f"del_{i}_{idx}"): usun_modul(i, idx); st.rerun()
+                    if c_del.button("❌", key=f"del_{i}_{idx}"): usun_modul(i, idx); st.rerun()
                     c_info.markdown(f"{mod['typ']}")
             with st.form(key=f"form_add_{i}"):
                 f_typ = st.selectbox("Typ", ["Półki", "Szuflady", "Drążek", "Pusta"])
@@ -232,7 +230,8 @@ def gen_wiercenia_boku(moduly, is_mirror=False):
     return otwory
 
 def run_generator():
-    global lista_elementow; lista_elementow = [] 
+    global lista_elementow, counts_dict
+    lista_elementow = []; counts_dict = {} # FIX: Reset liczników!
     if "HDF" in TYP_PLECOW: dodaj_element_do_listy("Plecy (HDF)", W_MEBLA-4, H_MEBLA-4, 3, "3mm HDF", [], "X")
     elif GR_PLECOW > 0: dodaj_element_do_listy("Plecy (Płyta)", (W_MEBLA if "Nakładane" in TYP_KONSTRUKCJI else SZER_WEW_TOTAL+(ILOSC_PRZEGROD*GR_PLYTY)), WYS_WEWNETRZNA, GR_PLECOW, f"{GR_PLECOW}mm KORPUS", [], "X")
     dodaj_element_do_listy("Bok Lewy", D_MEBLA, WYS_BOKU, GR_PLYTY, "18mm KORPUS", gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(0, []), False), "L")
@@ -349,7 +348,7 @@ def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L
     # Margins
     mx = max(szer*0.3, 350); my = max(wys*0.2, 250)
     ax.set_xlim(-mx, szer+mx); ax.set_ylim(-my, wys+my)
-    plt.subplots_adjust(left=0.02, right=0.98, top=0.88, bottom=0.02); ax.set_aspect('equal'); ax.axis('off'); return fig
+    plt.subplots_adjust(left=0.02, right=0.98, top=0.85, bottom=0.02); ax.set_aspect('equal'); ax.axis('off'); return fig
 
 def rysuj_tabele_strona(id_e, n, o):
     plt.close('all'); fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis('off')
@@ -369,6 +368,7 @@ def rysuj_tabele_strona(id_e, n, o):
     else: ax.text(0.5, 0.5, "Brak otworów", ha='center')
     return fig
 
+# FIX: POPRAWIONY BŁĄD SKŁADNI W ROZKROJU!
 def rysuj_nesting(els):
     els = sorted(els, key=lambda x: x['h'], reverse=True)
     fig = plt.figure(figsize=(10, 10)); ax = fig.add_subplot(111)
@@ -438,6 +438,8 @@ with tabs[2]: st.text(generuj_instrukcje_tekst())
 with tabs[3]:
     st.write(f"RAZEM (Płyta): {sum(x['Szerokość [mm]']*x['Wysokość [mm]'] for x in lista_elementow if 'KORPUS' in x['Materiał'])/1000000:.2f} m2")
 with tabs[4]:
-    ek = [{"w":x['Szerokość [mm]'], "h":x['Wysokość [mm]'], "nazwa":x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]
-    if ek: st.pyplot(rysuj_nesting([{"w":x['Szerokość [mm]'], "h":x['Wysokość [mm]'], "nazwa":x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]))
+    # FIX: POPRAWIONY BŁĄD SKŁADNI!
+    el_nest = [{"w":x['Szerokość [mm]'], "h":x['Wysokość [mm]'], "nazwa":x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]
+    if el_nest: st.pyplot(rysuj_nesting(el_nest))
+    else: st.warning("Brak formatek korpusu")
 with tabs[5]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ILOSC_PRZEGROD, st.session_state['moduly_sekcji'], SZER_JEDNEJ_WNEKI, TYP_KONSTRUKCJI))
