@@ -7,7 +7,6 @@ import textwrap
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.backends.backend_pdf import PdfPages
-import plotly.graph_objects as go # NOWOŚĆ: Biblioteka do 3D
 
 # ==========================================
 # KONFIGURACJA STRONY
@@ -50,7 +49,7 @@ def init_state():
 init_state()
 
 # ==========================================
-# 2. DEFINICJE FUNKCJI (LOGIKA)
+# 2. DEFINICJE FUNKCJI POMOCNICZYCH
 # ==========================================
 def export_project_to_json():
     data = {
@@ -103,14 +102,11 @@ def usun_modul(nr_sekcji, idx):
 
 def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stale):
     current_data = copy.deepcopy(st.session_state['moduly_sekcji'])
-    if nr_sekcji not in current_data:
-        current_data[nr_sekcji] = []
+    if nr_sekcji not in current_data: current_data[nr_sekcji] = []
     detale = {'ilosc': int(ilosc), 'drzwi': drzwi, 'fixed': polki_stale}
     nowy_modul = {
-        'typ': typ,
-        'wys_mode': 'auto' if "AUTO" in tryb_wys else 'fixed',
-        'wys_mm': float(wys_mm) if "Fixed" in tryb_wys else 0,
-        'detale': detale 
+        'typ': typ, 'wys_mode': 'auto' if "AUTO" in tryb_wys else 'fixed',
+        'wys_mm': float(wys_mm) if "Fixed" in tryb_wys else 0, 'detale': detale 
     }
     current_data[nr_sekcji].append(nowy_modul)
     st.session_state['moduly_sekcji'] = current_data
@@ -118,27 +114,22 @@ def dodaj_modul_akcja(nr_sekcji, typ, tryb_wys, wys_mm, ilosc, drzwi, polki_stal
 
 def get_unique_id(nazwa_baza, counts_dict, kod_projektu):
     key = nazwa_baza.upper().replace(" ", "_")
-    map_keys = {
-        "BOK LEWY": "BOK_L", "BOK PRAWY": "BOK_P", 
-        "WIENIEC GÓRNY": "WIENIEC_G", "WIENIEC DOLNY": "WIENIEC_D",
-        "PRZEGRODA": "PRZEG", "FRONT SZUFLADY": "FR_SZUF",
-        "DNO SZUFLADY": "DNO_SZUF", "TYŁ SZUFLADY": "TYL_SZUF"
-    }
+    map_keys = {"BOK LEWY": "BOK_L", "BOK PRAWY": "BOK_P", "WIENIEC GÓRNY": "WIENIEC_G", "WIENIEC DOLNY": "WIENIEC_D", "PRZEGRODA": "PRZEG", "FRONT SZUFLADY": "FR_SZUF", "DNO SZUFLADY": "DNO_SZUF", "TYŁ SZUFLADY": "TYL_SZUF"}
+    # Sprawdź czy nazwa zawiera klucz (dla dynamicznych nazw z numerami)
     short_key = key
-    for k, v in map_keys.items():
-        if key.startswith(k.replace(" ", "_")):
-            short_key = key.replace(k.replace(" ", "_"), v)
+    for k_map, v_map in map_keys.items():
+        if k_map.replace(" ", "_") in key:
+            short_key = key.replace(k_map.replace(" ", "_"), v_map)
             break
             
     current = counts_dict.get(short_key, 0) + 1
     counts_dict[short_key] = current
-    return f"{kod_projektu}_{short_key}_{current}"
+    return f"{kod_projektu}_{short_key}"
 
 def opisz_oklejanie(nazwa, szer_el, wys_el):
     n = nazwa.upper()
     if "FRONT" in n or "DRZWI" in n: return "4 krawędzie (2mm)"
-    elif "WIENIEC" in n or "PÓŁKA" in n or "PRZEGRODA" in n:
-        return "1 Długa (Przód)" if szer_el >= wys_el else "1 Krótka (Przód)"
+    elif "WIENIEC" in n or "PÓŁKA" in n or "PRZEGRODA" in n: return "1 Długa (Przód)" if szer_el >= wys_el else "1 Krótka (Przód)"
     elif "BOK" in n: return "1 Długa + 2 Krótkie (Przód+Góra+Dół)"
     return "Brak" if "DNO" in n or "TYŁ" in n or "PLECY" in n else "Wg uznania"
 
@@ -147,616 +138,295 @@ def opisz_oklejanie(nazwa, szer_el, wys_el):
 # ==========================================
 with st.sidebar:
     st.title("🪚 STOLARZPRO V20.3")
-    
-    st.markdown("### 💾 Projekt")
     c_dl, c_upl = st.columns(2)
-    json_data = export_project_to_json()
-    c_dl.download_button("Pobierz .JSON", json_data, file_name=f"projekt_{st.session_state['kod_pro']}.json", mime='application/json')
-    uploaded_file = c_upl.file_uploader("Wczytaj", type=['json'], label_visibility="collapsed")
-    if uploaded_file: load_project_from_json(uploaded_file)
+    c_dl.download_button("Pobierz .JSON", export_project_to_json(), f"projekt.json", "application/json")
+    uploaded = c_upl.file_uploader("Wczytaj", type=['json'], label_visibility="collapsed")
+    if uploaded: load_project_from_json(uploaded)
     if st.button("🗑️ NOWY PROJEKT", type="primary"): st.session_state.clear(); st.rerun()
-    
     st.markdown("---")
-    st.markdown("### 1. Gabaryty")
     st.text_input("Nazwa", key="kod_pro")
-    st.selectbox("Typ konstrukcji", ["Wieńce Nakładane", "Wieńce Wpuszczane"], key="typ_konstrukcji")
-    st.selectbox("Rodzaj Pleców", ["HDF 3mm (Nakładane)", "Płyta 18mm (Wpuszczana)", "Płyta 16mm (Wpuszczana)", "Brak"], key="typ_plecow")
+    st.selectbox("Typ", ["Wieńce Nakładane", "Wieńce Wpuszczane"], key="typ_konstrukcji")
+    st.selectbox("Plecy", ["HDF 3mm (Nakładane)", "Płyta 18mm (Wpuszczana)", "Płyta 16mm (Wpuszczana)", "Brak"], key="typ_plecow")
+    c1, c2 = st.columns(2); c1.number_input("Wysokość", key="h_mebla"); c2.number_input("Szerokość", key="w_mebla")
+    c1.number_input("Głębokość", key="d_mebla"); c2.number_input("Grubość", key="gr_plyty"); st.number_input("Przegrody", key="il_przegrod")
     
-    c1, c2 = st.columns(2)
-    c1.number_input("Wysokość", key="h_mebla"); c2.number_input("Szerokość", key="w_mebla")
-    c1.number_input("Głębokość", key="d_mebla"); c2.number_input("Grubość płyty", key="gr_plyty")
-    st.number_input("Ilość przegród pionowych", min_value=0, key="il_przegrod")
-
-    with st.expander("💰 Ceny"):
-        st.number_input("Płyta Korpus", value=50.0, key='cena_korpus')
-        st.number_input("Płyta Front", value=70.0, key='cena_front')
-        st.number_input("HDF", value=15.0, key='cena_hdf')
-        st.number_input("Oklejanie (zł/mb)", value=2.0, key='cena_okl')
-
-    st.markdown("### 2. Konfigurator Modułowy")
-    aktualna_ilosc_sekcji = st.session_state['il_przegrod'] + 1
-    tabs_sekcji = st.tabs([f"Sekcja {i+1}" for i in range(aktualna_ilosc_sekcji)])
-    for i, tab in enumerate(tabs_sekcji):
+    st.markdown("### 2. Moduły")
+    tabs = st.tabs([f"Sekcja {i+1}" for i in range(st.session_state['il_przegrod']+1)])
+    for i, tab in enumerate(tabs):
         with tab:
-            m_sekcji = st.session_state['moduly_sekcji'].get(i, [])
-            if m_sekcji:
-                for idx, mod in enumerate(m_sekcji):
+            ms = st.session_state['moduly_sekcji'].get(i, [])
+            if ms:
+                for idx, mod in enumerate(ms):
                     c_del, c_info = st.columns([1, 4])
-                    if c_del.button("❌", key=f"del_{i}_{idx}"): usun_modul(i, idx); st.rerun()
+                    if c_del.button("X", key=f"del_{i}_{idx}"): usun_modul(i, idx); st.rerun()
                     c_info.markdown(f"{mod['typ']}")
-            with st.form(key=f"form_add_{i}"):
-                f_typ = st.selectbox("Typ", ["Półki", "Szuflady", "Drążek", "Pusta"])
-                f_tryb = st.selectbox("Wysokość", ["Fixed (mm)", "AUTO"])
-                f_wys = st.number_input("Wysokość (mm)", 100, 2000, 600)
-                f_il = st.number_input("Ilość", 1, 10, 1)
-                c_a, c_b = st.columns(2)
-                f_d = c_a.checkbox("Drzwi?"); f_s = False
-                if f_typ == "Półki": f_s = c_b.checkbox("Stałe?")
-                if st.form_submit_button("Dodaj"): dodaj_modul_akcja(i, f_typ, f_tryb, f_wys, f_il, f_d, f_s); st.rerun()
-
-    st.markdown("---")
-    c_s1, c_s2 = st.columns(2)
+            with st.form(f"f{i}"):
+                t = st.selectbox("Typ", ["Półki", "Szuflady", "Drążek", "Pusta"])
+                if st.form_submit_button("Dodaj"): dodaj_modul_akcja(i, t, "AUTO", 0, 1, False, False); st.rerun()
+    
+    st.markdown("---"); c_s1, c_s2 = st.columns(2)
     sys_k = c_s1.selectbox("Prowadnice", list(BAZA_SYSTEMOW.keys()))
     zaw_k = c_s2.selectbox("Zawiasy", list(BAZA_ZAWIASOW.keys()))
 
 # ==========================================
-# 4. SILNIK OBLICZENIOWY (GŁÓWNY)
+# 4. ZMIENNE GLOBALNE I OBLICZENIA
 # ==========================================
 PARAMS_SZUFLAD = BAZA_SYSTEMOW[sys_k]
 PARAMS_ZAWIAS = BAZA_ZAWIASOW[zaw_k]
-H_MEBLA = st.session_state['h_mebla']
-W_MEBLA = st.session_state['w_mebla']
-D_MEBLA = st.session_state['d_mebla']
-GR_PLYTY = st.session_state['gr_plyty']
-TYP_KONSTRUKCJI = st.session_state.get('typ_konstrukcji', "Wieńce Nakładane")
-TYP_PLECOW = st.session_state.get('typ_plecow', "HDF 3mm (Nakładane)")
-ILOSC_PRZEGROD = st.session_state['il_przegrod']
-N_SEKCJI = ILOSC_PRZEGROD + 1
+H_MEBLA = st.session_state['h_mebla']; W_MEBLA = st.session_state['w_mebla']; D_MEBLA = st.session_state['d_mebla']; GR_PLYTY = st.session_state['gr_plyty']
+TYP_KONSTRUKCJI = st.session_state.get('typ_konstrukcji', "Wieńce Nakładane"); TYP_PLECOW = st.session_state.get('typ_plecow', "HDF 3mm (Nakładane)")
+ILOSC_PRZEGROD = st.session_state['il_przegrod']; N_SEKCJI = ILOSC_PRZEGROD + 1
 KOD_PROJEKTU = st.session_state['kod_pro'].upper().replace(" ", "_")
 
-# Wymiary pochodne
 if "Wpuszczane" in TYP_KONSTRUKCJI:
-    WYS_BOKU = H_MEBLA
-    SZER_WIENCA = W_MEBLA - (2 * GR_PLYTY) - (ILOSC_PRZEGROD * GR_PLYTY)
-    if ILOSC_PRZEGROD > 0: SZER_WIENCA = W_MEBLA - (2 * GR_PLYTY) 
-    SZER_WEW_TOTAL = SZER_WIENCA - (ILOSC_PRZEGROD * GR_PLYTY)
+    WYS_BOKU = H_MEBLA; SZER_WIENCA = W_MEBLA - (2*GR_PLYTY) - (ILOSC_PRZEGROD*GR_PLYTY)
+    if ILOSC_PRZEGROD > 0: SZER_WIENCA = W_MEBLA - (2*GR_PLYTY)
+    SZER_WEW_TOTAL = SZER_WIENCA - (ILOSC_PRZEGROD*GR_PLYTY)
 else:
-    WYS_BOKU = H_MEBLA - (2 * GR_PLYTY)
-    SZER_WIENCA = W_MEBLA
-    SZER_WEW_TOTAL = W_MEBLA - (2 * GR_PLYTY) - (ILOSC_PRZEGROD * GR_PLYTY)
+    WYS_BOKU = H_MEBLA - (2*GR_PLYTY); SZER_WIENCA = W_MEBLA
+    SZER_WEW_TOTAL = W_MEBLA - (2*GR_PLYTY) - (ILOSC_PRZEGROD*GR_PLYTY)
 
 SZER_JEDNEJ_WNEKI = SZER_WEW_TOTAL / N_SEKCJI if N_SEKCJI > 0 else 0
-WYS_WEWNETRZNA = H_MEBLA - (2 * GR_PLYTY)
+WYS_WEWNETRZNA = H_MEBLA - (2*GR_PLYTY)
 GR_PLECOW = 18 if "18mm" in TYP_PLECOW else (16 if "16mm" in TYP_PLECOW else 0)
 GLEBOKOSC_WEWNETRZNA = D_MEBLA - GR_PLECOW
 
-# --- GENEROWANIE LISTY ELEMENTÓW ---
-lista_elementow = []
-counts_dict = {}
+lista_elementow = []; counts_dict = {}
 
 def dodaj_element_do_listy(nazwa, szer, wys, gr, mat, wiercenia, ori):
     ident = get_unique_id(nazwa, counts_dict, KOD_PROJEKTU)
     okl = opisz_oklejanie(nazwa, szer, wys)
-    lista_elementow.append({
-        "ID": ident, "Nazwa": nazwa, "Szerokość [mm]": int(round(szer)), "Wysokość [mm]": int(round(wys)),
-        "Grubość [mm]": gr, "Materiał": mat, "Oklejanie": okl, "wiercenia": wiercenia, "orientacja": ori
-    })
+    lista_elementow.append({"ID": ident, "Nazwa": nazwa, "Szerokość [mm]": int(round(szer)), "Wysokość [mm]": int(round(wys)), "Grubość [mm]": gr, "Materiał": mat, "Oklejanie": okl, "wiercenia": wiercenia, "orientacja": ori})
 
 def gen_wiercenia_boku(moduly, is_mirror=False):
     otwory = []
-    if is_mirror:
-        x_f = D_MEBLA - 37.0; x_b = D_MEBLA - (37.0 + 224.0); x_plecy_ref = GR_PLECOW / 2
-    else:
-        x_f = 37.0; x_b = 37.0 + 224.0; x_plecy_ref = D_MEBLA - (GR_PLECOW / 2)
-
-    if "Wpuszczane" in TYP_KONSTRUKCJI:
-        x_wt = 50.0 if is_mirror else D_MEBLA - 50.0
-        otwory += [(x_f, GR_PLYTY/2, 'blue'), (x_wt, GR_PLYTY/2, 'blue'), (x_f, H_MEBLA-GR_PLYTY/2, 'blue'), (x_wt, H_MEBLA-GR_PLYTY/2, 'blue')]
-
+    if is_mirror: x_f = D_MEBLA-37.0; x_b = D_MEBLA-(37.0+224.0); x_plecy_ref = GR_PLECOW/2
+    else: x_f = 37.0; x_b = 37.0+224.0; x_plecy_ref = D_MEBLA-(GR_PLECOW/2)
+    if "Wpuszczane" in TYP_KONSTRUKCJI: xt = 50.0 if is_mirror else D_MEBLA-50.0; otwory += [(x_f, GR_PLYTY/2, 'blue'), (xt, GR_PLYTY/2, 'blue'), (x_f, H_MEBLA-GR_PLYTY/2, 'blue'), (xt, H_MEBLA-GR_PLYTY/2, 'blue')]
     if GR_PLECOW > 0:
-        ilosc_otw = int(H_MEBLA / 400) + 1
-        for k in range(ilosc_otw + 1):
-            yp = 50 + k * ((H_MEBLA - 100) / ilosc_otw)
-            if yp > GR_PLYTY and yp < (H_MEBLA - GR_PLYTY): otwory.append((x_plecy_ref, yp, 'blue'))
-    
-    curr_y = GR_PLYTY
-    fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
-    auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
-    h_auto = (WYS_WEWNETRZNA - fixed_sum) / max(1, auto_cnt)
-    
-    for idx, mod in enumerate(moduly):
-        h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
-        if idx > 0: # Wieniec środkowy
-            yw = curr_y + GR_PLYTY/2; xt = 50.0 if is_mirror else D_MEBLA - 50.0
-            otwory += [(x_f, yw, 'blue'), (xt, yw, 'blue')]; curr_y += GR_PLYTY
-        
-        det = mod['detale']
-        if det.get('drzwi'):
-            otwory += [(x_f, curr_y + 100, 'green'), (x_f, curr_y + h_mod - 100, 'green')]
-        
-        if mod['typ'] == "Szuflady":
-            n = det.get('ilosc', 2); h_front = (h_mod - ((n-1)*3)) / n
-            for k in range(n):
-                ys = curr_y + k*(h_front+3) + 3 + PARAMS_SZUFLAD["offset_prowadnica"]
-                otwory += [(x_f, ys, 'red'), (x_b, ys, 'red')]
-        elif mod['typ'] == "Półki":
-            n = det.get('ilosc', 1); gap = h_mod / (n + 1)
-            for k in range(n):
-                yp = curr_y + (k+1)*gap
-                xb = (50.0 if is_mirror else D_MEBLA - 50.0) if det.get('fixed') else (50.0 if is_mirror else (D_MEBLA - GR_PLECOW) - 50.0)
-                col = 'blue' if det.get('fixed') else 'green'
-                otwory += [(x_f, yp, col), (xb, yp, col)]
-        curr_y += h_mod
+        for k in range(int(H_MEBLA/400)+2):
+            yp = 50 + k*((H_MEBLA-100)/(int(H_MEBLA/400)+1)); 
+            if yp>GR_PLYTY and yp<H_MEBLA-GR_PLYTY: otwory.append((x_plecy_ref, yp, 'blue'))
+    curr_y = GR_PLYTY; ha = (WYS_WEWNETRZNA - sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')) / max(1, sum(1 for m in moduly if m['wys_mode'] == 'auto'))
+    for m in moduly:
+        hm = m['wys_mm'] if m['wys_mode'] == 'fixed' else ha
+        det = m['detale']
+        if m != moduly[0]: yw=curr_y+GR_PLYTY/2; xt=50.0 if is_mirror else D_MEBLA-50.0; otwory+=[(x_f, yw, 'blue'), (xt, yw, 'blue')]; curr_y+=GR_PLYTY
+        if det.get('drzwi'): otwory+=[(x_f, curr_y+100, 'green'), (x_f, curr_y+hm-100, 'green')]
+        if m['typ'] == "Szuflady":
+            for k in range(det.get('ilosc', 2)): ys=curr_y+k*((hm-(det.get('ilosc')-1)*3)/det.get('ilosc')+3)+3+PARAMS_SZUFLAD["offset_prowadnica"]; otwory+=[(x_f, ys, 'red'), (x_b, ys, 'red')]
+        elif m['typ'] == "Półki":
+            for k in range(det.get('ilosc', 1)): yp=curr_y+(k+1)*(hm/(det.get('ilosc')+1)); xb=(50.0 if is_mirror else D_MEBLA-50.0) if det.get('fixed') else (50.0 if is_mirror else D_MEBLA-GR_PLECOW-50.0); otwory+=[(x_f, yp, 'blue' if det.get('fixed') else 'green'), (xb, yp, 'blue' if det.get('fixed') else 'green')]
+        curr_y += hm
     return otwory
 
 def run_generator():
-    global lista_elementow
-    lista_elementow = [] 
-    
+    global lista_elementow; lista_elementow = [] 
     if "HDF" in TYP_PLECOW: dodaj_element_do_listy("Plecy (HDF)", W_MEBLA-4, H_MEBLA-4, 3, "3mm HDF", [], "X")
-    elif GR_PLECOW > 0:
-        szer_pl = W_MEBLA if "Nakładane" in TYP_KONSTRUKCJI else SZER_WEW_TOTAL + (ILOSC_PRZEGROD*GR_PLYTY)
-        dodaj_element_do_listy("Plecy (Płyta)", szer_pl, WYS_WEWNETRZNA, GR_PLECOW, f"{GR_PLECOW}mm KORPUS", [], "X")
-    
-    otw_L = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(0, []), False)
-    dodaj_element_do_listy("Bok Lewy", D_MEBLA, WYS_BOKU, GR_PLYTY, "18mm KORPUS", otw_L, "L")
-    
-    otw_P = gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(N_SEKCJI-1, []), True)
-    dodaj_element_do_listy("Bok Prawy", D_MEBLA, WYS_BOKU, GR_PLYTY, "18mm KORPUS", otw_P, "P")
-    
+    elif GR_PLECOW > 0: dodaj_element_do_listy("Plecy (Płyta)", (W_MEBLA if "Nakładane" in TYP_KONSTRUKCJI else SZER_WEW_TOTAL+(ILOSC_PRZEGROD*GR_PLYTY)), WYS_WEWNETRZNA, GR_PLECOW, f"{GR_PLECOW}mm KORPUS", [], "X")
+    dodaj_element_do_listy("Bok Lewy", D_MEBLA, WYS_BOKU, GR_PLYTY, "18mm KORPUS", gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(0, []), False), "L")
+    dodaj_element_do_listy("Bok Prawy", D_MEBLA, WYS_BOKU, GR_PLYTY, "18mm KORPUS", gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(N_SEKCJI-1, []), True), "P")
     dodaj_element_do_listy("Wieniec Górny", SZER_WIENCA, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", [], "L")
     dodaj_element_do_listy("Wieniec Dolny", SZER_WIENCA, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", [], "L")
-    
-    for i in range(ILOSC_PRZEGROD):
-        mod_L = st.session_state['moduly_sekcji'].get(i, []); mod_R = st.session_state['moduly_sekcji'].get(i+1, [])
-        otw = gen_wiercenia_boku(mod_L, True) + gen_wiercenia_boku(mod_R, False)
-        dodaj_element_do_listy(f"Przegroda {i+1}", D_MEBLA, WYS_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", otw, "L")
-
+    for i in range(ILOSC_PRZEGROD): dodaj_element_do_listy(f"Przegroda {i+1}", D_MEBLA, WYS_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(i, []), True)+gen_wiercenia_boku(st.session_state['moduly_sekcji'].get(i+1, []), False), "L")
     for i in range(N_SEKCJI):
         moduly = st.session_state['moduly_sekcji'].get(i, [])
-        fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
-        auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
-        h_auto = (WYS_WEWNETRZNA - fixed_sum) / max(1, auto_cnt)
-        
+        ha = (WYS_WEWNETRZNA - sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')) / max(1, sum(1 for m in moduly if m['wys_mode'] == 'auto'))
         for idx, mod in enumerate(moduly):
             if idx > 0: dodaj_element_do_listy(f"Wieniec Środkowy (Sekcja {i+1})", SZER_JEDNEJ_WNEKI, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, "18mm KORPUS", [], "L")
-            h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto
-            det = mod['detale']
-            if det.get('drzwi'): dodaj_element_do_listy(f"Drzwi (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-4, h_mod-4, 18, "18mm FRONT", [], "L")
-            
+            hm = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else ha; det = mod['detale']
+            if det.get('drzwi'): dodaj_element_do_listy(f"Drzwi (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-4, hm-4, 18, "18mm FRONT", [], "L")
             if mod['typ'] == "Szuflady":
-                n = det.get('ilosc', 2); h_f = (h_mod - ((n-1)*3)) / n
-                mat_f = "18mm KORPUS" if det.get('drzwi') else "18mm FRONT"
-                for k in range(n):
-                    dodaj_element_do_listy(f"Front Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-4, h_f, 18, mat_f, [], "D")
+                hf = (hm - ((det.get('ilosc')-1)*3)) / det.get('ilosc')
+                for k in range(det.get('ilosc')):
+                    dodaj_element_do_listy(f"Front Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-4, hf, 18, "18mm KORPUS" if det.get('drzwi') else "18mm FRONT", [], "D")
                     dodaj_element_do_listy(f"Dno Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-71, 476, 3, "3mm HDF", [], "D")
                     dodaj_element_do_listy(f"Tył Szuflady {k+1} (Sekcja {i+1})", SZER_JEDNEJ_WNEKI-83, 150, 16, "16mm BIAŁA", [], "D")
             elif mod['typ'] == "Półki":
-                n = det.get('ilosc', 1); is_fixed = det.get('fixed', False)
-                w_p = SZER_JEDNEJ_WNEKI - (0 if is_fixed else 2)
-                if det.get('drzwi') and not is_fixed: w_p -= 10
-                d_p = GLEBOKOSC_WEWNETRZNA if is_fixed else (GLEBOKOSC_WEWNETRZNA - 20)
-                for k in range(n):
-                    typ_nazwa = "Półka Stała" if is_fixed else "Półka Ruchoma"
-                    dodaj_element_do_listy(f"{typ_nazwa} {k+1} (Sekcja {i+1})", w_p, d_p, 18, "18mm KORPUS", [], "L")
+                wp = SZER_JEDNEJ_WNEKI - (0 if det.get('fixed') else 2)
+                if det.get('drzwi') and not det.get('fixed'): wp -= 10
+                dp = GLEBOKOSC_WEWNETRZNA if det.get('fixed') else (GLEBOKOSC_WEWNETRZNA - 20)
+                for k in range(det.get('ilosc')): dodaj_element_do_listy(f"{'Półka Stała' if det.get('fixed') else 'Półka Ruchoma'} {k+1} (Sekcja {i+1})", wp, dp, 18, "18mm KORPUS", [], "L")
 
 run_generator()
 df = pd.DataFrame(lista_elementow)
 
 # ==========================================
-# 5. GENEROWANIE 3D (NOWOŚĆ: PLOTLY)
+# 5. INSTRUKCJE I RYSUNKI
 # ==========================================
-def stworz_bryle(x, y, z, dx, dy, dz, color, opacity=1.0, name=""):
-    return go.Mesh3d(
-        x=[x, x+dx, x+dx, x, x, x+dx, x+dx, x],
-        y=[y, y, y+dy, y+dy, y, y, y+dy, y+dy],
-        z=[z, z, z, z, z+dz, z+dz, z+dz, z+dz],
-        i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
-        j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
-        k=[0, 7, 2, 3, 6, 7, 1, 1, 5, 5, 7, 6],
-        color=color, opacity=opacity, name=name, showscale=False, hoverinfo='name'
-    )
-
-def generuj_widok_3d():
-    fig = go.Figure()
-    
-    # Kolory
-    c_korpus = '#d2b48c' # Tan
-    c_front = '#8b4513'  # SaddleBrown
-    c_back = '#a9a9a9'   # DarkGray
-    
-    # 1. Boki
-    # Lewy (X=0)
-    fig.add_trace(stworz_bryle(0, 0, 0, GR_PLYTY, D_MEBLA, WYS_BOKU, c_korpus, name="Bok Lewy"))
-    # Prawy (X=Max)
-    fig.add_trace(stworz_bryle(W_MEBLA-GR_PLYTY, 0, 0, GR_PLYTY, D_MEBLA, WYS_BOKU, c_korpus, name="Bok Prawy"))
-    
-    # 2. Wieńce (Logic Nakładane vs Wpuszczane)
-    if "Wpuszczane" in TYP_KONSTRUKCJI:
-        # Wieniec dolny (nad podłogą, między bokami)
-        fig.add_trace(stworz_bryle(GR_PLYTY, 0, GR_PLYTY, SZER_WIENCA, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, c_korpus, name="Wieniec Dolny"))
-        # Wieniec górny (pod sufitem, między bokami)
-        fig.add_trace(stworz_bryle(GR_PLYTY, 0, H_MEBLA-2*GR_PLYTY, SZER_WIENCA, GLEBOKOSC_WEWNETRZNA, GR_PLYTY, c_korpus, name="Wieniec Górny"))
-    else:
-        # Wieniec dolny (pod bokami, na całą szerokość)
-        fig.add_trace(stworz_bryle(0, 0, 0, W_MEBLA, D_MEBLA, GR_PLYTY, c_korpus, name="Wieniec Dolny"))
-        # Wieniec górny (na bokach, na całą szerokość)
-        fig.add_trace(stworz_bryle(0, 0, H_MEBLA-GR_PLYTY, W_MEBLA, D_MEBLA, GR_PLYTY, c_korpus, name="Wieniec Górny"))
-
-    # 3. Plecy
-    if GR_PLECOW > 0 or "HDF" in TYP_PLECOW:
-        th_plecy = 3 if "HDF" in TYP_PLECOW else GR_PLECOW
-        # Plecy są zawsze z tyłu (Y=Max lub Y=0 w zależności od układu - tu przyjmijmy Y=D_MEBLA to tył, a Y=0 to front? 
-        # W 2D mieliśmy Y jako wysokość... W 3D: Z=Wysokość, X=Szerokość, Y=Głębokość.
-        # Przyjmijmy Y=0 to TYŁ, Y=D_MEBLA to FRONT.
-        fig.add_trace(stworz_bryle(0, 0, 0, W_MEBLA, th_plecy, H_MEBLA, c_back, name="Plecy"))
-
-    # 4. Wnętrze (Przegrody i Półki)
-    current_x = GR_PLYTY
-    
-    for i in range(N_SEKCJI):
-        # Przegroda (jeśli nie ostatnia sekcja)
-        if i < ILOSC_PRZEGROD:
-            fig.add_trace(stworz_bryle(current_x + SZER_JEDNEJ_WNEKI, 0, GR_PLYTY, GR_PLYTY, GLEBOKOSC_WEWNETRZNA, WYS_WEWNETRZNA, c_korpus, name=f"Przegroda {i+1}"))
-        
-        moduly = st.session_state['moduly_sekcji'].get(i, [])
-        
-        # Obliczenie wysokości (uproszczone jak w 2D)
-        fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed')
-        auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto')
-        h_auto = (WYS_WEWNETRZNA - fixed_sum) / max(1, auto_cnt)
-        
-        current_z = GR_PLYTY if "Wpuszczane" in TYP_KONSTRUKCJI else 2*GR_PLYTY # Start Z
-        
-        for m in moduly:
-            h_mod = m['wys_mm'] if m['wys_mode'] == 'fixed' else h_auto
-            
-            # Wieniec/Półka pod modułem (jeśli nie pierwszy)
-            # (Pominięte dla uproszczenia w tym widoku, skupiamy się na wypełnieniu)
-            
-            # ELEMENTY WEWNĘTRZNE
-            if m['typ'] == "Półki":
-                n = m['detale'].get('ilosc', 1)
-                gap = h_mod / (n + 1)
-                for k in range(n):
-                    z_shelf = current_z + (k+1)*gap
-                    # Półka
-                    fig.add_trace(stworz_bryle(current_x, GR_PLECOW, z_shelf, SZER_JEDNEJ_WNEKI, GLEBOKOSC_WEWNETRZNA-20, GR_PLYTY, c_korpus, name="Półka"))
-            
-            elif m['typ'] == "Szuflady":
-                n = m['detale'].get('ilosc', 1)
-                h_f = (h_mod - (n-1)*3) / n
-                for k in range(n):
-                    z_draw = current_z + k*(h_f+3)
-                    # Front szuflady (Y=Głębokość, czyli z przodu)
-                    fig.add_trace(stworz_bryle(current_x, D_MEBLA, z_draw, SZER_JEDNEJ_WNEKI, GR_PLYTY, h_f, c_front, opacity=0.8, name="Front Szuflady"))
-            
-            # Drzwi (na cały moduł)
-            if m['detale'].get('drzwi'):
-                 fig.add_trace(stworz_bryle(current_x, D_MEBLA, current_z, SZER_JEDNEJ_WNEKI, GR_PLYTY, h_mod, c_front, opacity=0.7, name="Drzwi"))
-
-            current_z += h_mod
-        
-        current_x += SZER_JEDNEJ_WNEKI + GR_PLYTY
-
-    # Ustawienia kamery i osi
-    fig.update_layout(
-        scene=dict(
-            xaxis=dict(title="Szerokość (X)"),
-            yaxis=dict(title="Głębokość (Y)"),
-            zaxis=dict(title="Wysokość (Z)"),
-            aspectmode='data' # Zachowanie proporcji 1:1:1
-        ),
-        margin=dict(r=0, l=0, b=0, t=0)
-    )
-    return fig
-
-# ==========================================
-# 6. GENEROWANIE INSTRUKCJI I GRAFIKI
-# ==========================================
-def oblicz_okucia():
+def generuj_instrukcje_tekst():
     konf = 0; wkr = 0
     if "Wpuszczane" in TYP_KONSTRUKCJI: konf += 8 + (4 * ILOSC_PRZEGROD)
     if "Płyta" in TYP_PLECOW: konf += 4 * (int(H_MEBLA/400)+1)
-    
-    for s_idx, moduly in st.session_state['moduly_sekcji'].items():
-        if len(moduly) > 1: konf += 4 * (len(moduly) - 1)
-        for m in moduly:
-            det = m['detale']
-            if m['typ'] == "Półki" and det.get('fixed'): konf += 4 * det.get('ilosc', 0)
-            if m['typ'] == "Szuflady": wkr += 8 * det.get('ilosc', 0)
-            if det.get('drzwi'): wkr += 8
-    
+    for s in st.session_state['moduly_sekcji'].values():
+        if len(s) > 1: konf += 4 * (len(s)-1)
+        for m in s:
+            if m['typ']=="Półki" and m['detale'].get('fixed'): konf+=4*m['detale'].get('ilosc')
+            if m['typ']=="Szuflady": wkr+=8*m['detale'].get('ilosc')
+            if m['detale'].get('drzwi'): wkr+=8
     if "HDF" in TYP_PLECOW: wkr += int((2*H_MEBLA + 2*W_MEBLA)/150)
-    return konf, wkr
+    
+    return f"""INSTRUKCJA MONTAŻU: {KOD_PROJEKTU}
+------------------------------------------------------------
+LISTA ZAKUPOWA (SZACUNEK):
+[ ] Konfirmaty: ok. {konf} szt.
+[ ] Wkręty 3.5x16: ok. {wkr} szt.
+------------------------------------------------------------
+KROK 0: TRASOWANIE
+1. Użyj rysunków PDF do zaznaczenia linii przerywanych na bokach.
+2. Przecięcia linii to punkty wiercenia.
 
-def generuj_instrukcje_tekst():
-    konf, wkr = oblicz_okucia()
-    steps = []
-    steps.append(f"INSTRUKCJA MONTAŻU: {KOD_PROJEKTU}")
-    steps.append("-" * 60)
-    steps.append("LISTA ZAKUPOWA (SZACUNEK):")
-    steps.append(f"[ ] Konfirmaty: ok. {konf} szt.")
-    steps.append(f"[ ] Wkręty 3.5x16: ok. {wkr} szt.")
-    steps.append("-" * 60)
-    steps.append("KROK 0: TRASOWANIE")
-    steps.append("1. Weź Boki szafki i spójrz na rysunki w PDF.")
-    steps.append("2. Linie przerywane (Y:..., X:...) to linie pomocnicze.")
-    steps.append("3. Narysuj je ołówkiem na płycie. Przecięcia to punkty wiercenia.")
-    steps.append("")
-    steps.append("KROK 1: WIERCENIE")
-    steps.append("1. Punkty NIEBIESKIE (Konfirmaty): Wiertło fi 5mm/7mm (przelotowo przez bok).")
-    steps.append("2. Punkty CZERWONE/ZIELONE: Wiertło fi 2-3mm (napuntowanie) na głębokość 10mm.")
-    steps.append("")
-    steps.append("KROK 2: SKŁADANIE KORPUSU")
-    if "Wpuszczane" in TYP_KONSTRUKCJI:
-        steps.append("1. Skręć boki z wieńcami używając konfirmatów.")
-    else:
-        steps.append("1. Postaw boki na wieńcu dolnym. Skręć od dołu.")
-    steps.append("")
-    steps.append("KROK 3: PLECY I FRONTY")
-    if "HDF" in TYP_PLECOW: steps.append("1. Wyrównaj przekątne. Przybij plecy HDF.")
-    steps.append("2. Zamontuj szuflady/drzwi.")
-    return "\n".join(steps)
+KROK 1: WIERCENIE
+1. Punkty NIEBIESKIE: Wierć przelotowo (fi 5/7mm) pod konfirmaty.
+2. Punkty CZERWONE/ZIELONE: Puntuj (fi 2mm) pod wkręty.
+
+KROK 2: MONTAŻ BOKÓW
+1. Przykręć prowadnice i zawiasy do leżących boków.
+
+KROK 3: SKŁADANIE KORPUSU
+1. Skręć wieńce z bokami. Sprawdź kąty.
+
+KROK 4: FINAŁ
+1. Montaż pleców i frontów."""
 
 def rysuj_instrukcje_pdf(tekst):
     plt.close('all'); fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis('off')
-    wrapped_text = "\n".join([textwrap.fill(line, width=85) for line in tekst.split('\n')])
-    ax.text(0.05, 0.95, wrapped_text, ha='left', va='top', fontsize=10, family='monospace', linespacing=1.4)
+    ax.text(0.05, 0.95, "\n".join([textwrap.fill(l, 85) for l in tekst.split('\n')]), ha='left', va='top', fontsize=10, family='monospace')
     return fig
 
+# FIX: FRONT BARDZO DALEKO, RYSUNEK SKALOWANY
 def rysuj_element(szer, wys, id_elementu, nazwa, otwory=[], orientacja_frontu="L", kolor_tla='#e6ccb3', figsize=(10, 7)):
-    plt.close('all')
-    fig, ax = plt.subplots(figsize=figsize)
-    
+    plt.close('all'); fig, ax = plt.subplots(figsize=figsize)
     if "HDF" in nazwa: kolor_tla = '#d9d9d9'
+    rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1); ax.add_patch(rect)
     
-    # Rysunek
-    rect = patches.Rectangle((0, 0), szer, wys, linewidth=2, edgecolor='black', facecolor=kolor_tla, zorder=1)
-    ax.add_patch(rect)
-    
-    # HEADER
-    fig.text(0.5, 0.96, nazwa.upper(), ha='center', va='top', fontsize=18, weight='bold', color='black')
-    fig.text(0.5, 0.93, id_elementu, ha='center', va='top', fontsize=10, color='#555555', family='monospace')
+    # Header
+    fig.text(0.5, 0.96, nazwa.upper(), ha='center', va='top', fontsize=18, weight='bold')
+    fig.text(0.5, 0.93, id_elementu, ha='center', va='top', fontsize=10, color='#555', family='monospace')
 
     if otwory:
-        unique_x = sorted(list(set([o[0] for o in otwory])))
-        unique_y = sorted(list(set([o[1] for o in otwory])))
-        
-        # Linie Y (Poziome)
-        for y_line in unique_y:
-            ax.plot([-500, szer+500], [y_line, y_line], color='#666666', linestyle='--', linewidth=0.5, alpha=0.5, zorder=2)
-            ax.text(-25, y_line, f"Y:{y_line:.0f}", ha='right', va='center', fontsize=7, color='black')
-            ax.text(szer+25, y_line, f"{y_line:.0f}", ha='left', va='center', fontsize=7, color='black')
+        ux = sorted(list(set([o[0] for o in otwory]))); uy = sorted(list(set([o[1] for o in otwory])))
+        for yl in uy:
+            ax.plot([-500, szer+500], [yl, yl], color='#444', linestyle='--', linewidth=0.4, alpha=0.6)
+            ax.text(-25, yl, f"Y:{yl:.0f}", ha='right', va='center', fontsize=7, color='#444')
+            ax.text(szer+25, yl, f"{yl:.0f}", ha='left', va='center', fontsize=7, color='#444')
+        for xl in ux:
+            ax.plot([xl, xl], [-500, wys+500], color='#444', linestyle='--', linewidth=0.4, alpha=0.6)
+            ax.text(xl, -30, f"X:{xl:.0f}", ha='center', va='top', fontsize=7, color='#444', rotation=90)
+        for i, (x,y,c) in enumerate(sorted(otwory, key=lambda k: (k[1], k[0]))):
+            if c=='blue': ax.add_patch(patches.Circle((x,y), 6, edgecolor='blue', facecolor='white', lw=2))
+            elif c=='red': ax.add_patch(patches.Circle((x,y), 4, color='red'))
+            elif c=='green': ax.add_patch(patches.Circle((x,y), 17.5 if "Front" in nazwa else 4, edgecolor='green', facecolor='white', lw=1.5))
+            ax.add_patch(patches.Circle((x+12, y+12), 9, color='black', zorder=40))
+            ax.text(x+12, y+12, str(i+1), color='white', ha='center', va='center', fontsize=9, weight='bold', zorder=41)
 
-        # Linie X (Pionowe)
-        for x_line in unique_x:
-            ax.plot([x_line, x_line], [-500, wys+500], color='#666666', linestyle='--', linewidth=0.5, alpha=0.5, zorder=2)
-            ax.text(x_line, -30, f"X:{x_line:.0f}", ha='center', va='top', fontsize=7, color='black', rotation=90)
-
-        # Otwory
-        otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
-        for i, otw in enumerate(otwory_sorted):
-            x, y = otw[0], otw[1]; kolor_kod = otw[2] if len(otw) > 2 else 'red'; nr = i + 1
-            if kolor_kod == 'blue': 
-                ax.add_patch(patches.Circle((x, y), radius=6, edgecolor='blue', facecolor='white', linewidth=2, zorder=20))
-                ax.plot([x-3, x+3], [y, y], color='blue', linewidth=1); ax.plot([x, x], [y-3, y+3], color='blue', linewidth=1)
-            elif kolor_kod == 'red': ax.add_patch(patches.Circle((x, y), radius=4, color='red', zorder=20))
-            elif kolor_kod == 'green': 
-                r = 17.5 if "Front" in nazwa else 4
-                ax.add_patch(patches.Circle((x, y), radius=r, edgecolor='green', facecolor='white', linewidth=1.5, zorder=20))
-            ax.add_patch(patches.Circle((x + 12, y + 12), radius=9, color='black', zorder=40))
-            ax.text(x + 12, y + 12, str(nr), color='white', ha='center', va='center', fontsize=9, weight='bold', zorder=41)
-
-    # Front (FIX: Bardzo duże odsunięcie dla Prawego Boku)
-    is_poziomy = "WIENIEC" in nazwa.upper() or "PÓŁKA" in nazwa.upper()
-    dist_front = 220 # Zwiększony dystans dla czytelności (omija Y-labels)
-    
+    # Front logic
+    is_h = "WIENIEC" in nazwa.upper() or "PÓŁKA" in nazwa.upper(); dist = 250 # FIX: 25cm odstępu
     if "Plecy" not in nazwa:
-        if is_poziomy:
-            ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
-            ax.text(szer/2, -dist_front, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
+        if is_h: 
+            ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828'))
+            ax.text(szer/2, -dist, "FRONT", ha='center', va='center', color='#d62828', weight='bold', fontsize=16)
         else:
-            if orientacja_frontu == 'L':
-                ax.add_patch(patches.Rectangle((-5, 0), 5, wys, color='#d62828', zorder=5))
-                ax.text(-dist_front, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
-            elif orientacja_frontu == 'P':
-                ax.add_patch(patches.Rectangle((szer, 0), 5, wys, color='#d62828', zorder=5))
-                ax.text(szer+dist_front, wys/2, "FRONT", rotation=270, color='#d62828', weight='bold', zorder=15, ha='center', va='center', fontsize=14)
-            elif orientacja_frontu == 'D': 
-                ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828', zorder=5))
-                ax.text(szer/2, -dist_front, "FRONT", ha='center', va='center', color='#d62828', weight='bold', zorder=15, fontsize=14)
+            if orientacja_frontu == 'L': ax.add_patch(patches.Rectangle((-5,0), 5, wys, color='#d62828')); ax.text(-dist, wys/2, "FRONT", rotation=90, color='#d62828', weight='bold', fontsize=16, ha='center', va='center')
+            elif orientacja_frontu == 'P': ax.add_patch(patches.Rectangle((szer,0), 5, wys, color='#d62828')); ax.text(szer+dist, wys/2, "FRONT", rotation=270, color='#d62828', weight='bold', fontsize=16, ha='center', va='center')
+            elif orientacja_frontu == 'D': ax.add_patch(patches.Rectangle((0, -5), szer, 5, color='#d62828')); ax.text(szer/2, -dist, "FRONT", ha='center', va='center', color='#d62828', weight='bold', fontsize=16)
 
-    # Wymiary główne
-    ax.text(szer/2, wys + 140, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
-    ax.text(szer + 140, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
+    # Dims
+    ax.text(szer/2, wys+150, f"{szer:.0f} mm", ha='center', weight='bold', fontsize=14)
+    ax.text(szer+150, wys/2, f"{wys:.0f} mm", va='center', rotation=90, weight='bold', fontsize=14)
     
-    # Marginesy (Bardzo duże)
-    margin_x = max(szer * 0.3, 300) # 300mm marginesu minimalnie
-    margin_y = max(wys * 0.2, 250)
-    ax.set_xlim(-margin_x, szer + margin_x); ax.set_ylim(-margin_y, wys + margin_y)
-    
-    plt.subplots_adjust(left=0.02, right=0.98, top=0.88, bottom=0.02)
-    ax.set_aspect('equal'); ax.axis('off')
-    return fig
+    # Margins
+    mx = max(szer*0.3, 350); my = max(wys*0.2, 250)
+    ax.set_xlim(-mx, szer+mx); ax.set_ylim(-my, wys+my)
+    plt.subplots_adjust(left=0.02, right=0.98, top=0.88, bottom=0.02); ax.set_aspect('equal'); ax.axis('off'); return fig
 
-def rysuj_tabele_strona(id_elementu, nazwa, otwory):
+def rysuj_tabele_strona(id_e, n, o):
     plt.close('all'); fig, ax = plt.subplots(figsize=(8.27, 11.69)); ax.axis('off')
-    fig.text(0.5, 0.95, f"TABELA WIERCEŃ", ha='center', fontsize=16, weight='bold')
-    fig.text(0.5, 0.92, f"Element: {nazwa}", ha='center', fontsize=12)
-    fig.text(0.5, 0.90, f"ID: {id_elementu}", ha='center', fontsize=10, color='#555', family='monospace')
-    table_data = []
-    otwory_sorted = sorted(otwory, key=lambda k: (k[1], k[0]))
-    for i, otw in enumerate(otwory_sorted):
-        x, y = otw[0], otw[1]; kolor_kod = otw[2] if len(otw) > 2 else 'red'; nr = i + 1
-        typ = "Konfirmat" if kolor_kod == 'blue' else ("Prowadnica" if kolor_kod == 'red' else "Podpórka/Zawias")
-        table_data.append([str(nr), f"{x:.1f}", f"{y:.1f}", typ])
-    if table_data:
-        col_labels = ["Nr", "X [mm]", "Y [mm]", "Typ Otworu"]; col_widths = [0.1, 0.2, 0.2, 0.5]
-        table = ax.table(cellText=table_data, colLabels=col_labels, loc='top', bbox=[0.05, 0.05, 0.9, 0.80], cellLoc='center', colWidths=col_widths)
-        table.auto_set_font_size(False); table.set_fontsize(10)
-        for (row, col), cell in table.get_celld().items():
-            cell.set_height(0.04)
-            if row == 0: cell.set_text_props(weight='bold', color='white'); cell.set_facecolor('#333333')
-            elif row % 2 == 0: cell.set_facecolor('#f9f9f9')
-    else: ax.text(0.5, 0.5, "Brak otworów.", ha='center')
+    fig.text(0.5, 0.95, "TABELA WIERCEŃ", ha='center', weight='bold', size=16)
+    fig.text(0.5, 0.92, f"Element: {n}", ha='center', size=12)
+    fig.text(0.5, 0.90, f"ID: {id_e}", ha='center', size=10, family='monospace', color='#555')
+    td = []
+    for i, (x,y,c) in enumerate(sorted(o, key=lambda k: (k[1], k[0]))):
+        t = "Konfirmat" if c=='blue' else ("Prowadnica" if c=='red' else "Podpórka/Zawias")
+        td.append([str(i+1), f"{x:.1f}", f"{y:.1f}", t])
+    if td:
+        tb = ax.table(cellText=td, colLabels=["Nr", "X", "Y", "Typ"], loc='top', bbox=[0.1, 0.05, 0.8, 0.8]); tb.auto_set_font_size(False); tb.set_fontsize(10)
+        for (r,c), cell in tb.get_celld().items():
+            cell.set_height(0.04); 
+            if r==0: cell.set_facecolor('#333'); cell.set_text_props(color='white', weight='bold')
+            elif r%2==0: cell.set_facecolor('#f4f4f4')
+    else: ax.text(0.5, 0.5, "Brak otworów", ha='center')
     return fig
 
-# FIX: POPRAWIONY RYSUNEK ROZKROJU (LEGENDA NA DOLE ZAMIAST TEKSTU NA RYSUNKU)
-def rysuj_nesting(elementy, arkusz_w=2800, arkusz_h=2070, rzaz=4):
-    elementy_sorted = sorted(elementy, key=lambda x: x['h'], reverse=True)
-    sheets = []; current_sheet = {'w': arkusz_w, 'h': arkusz_h, 'placements': []}; shelf_x, shelf_y, shelf_h = 0, 0, 0
-    for el in elementy_sorted:
-        w, h = el['w'] + rzaz, el['h'] + rzaz
-        if shelf_x + w <= arkusz_w: current_sheet['placements'].append((shelf_x, shelf_y, el['w'], el['h'], el['nazwa'])); shelf_x += w; shelf_h = max(shelf_h, h)
-        else:
-            shelf_x = 0; shelf_y += shelf_h; shelf_h = h
-            if shelf_y + h <= arkusz_h: current_sheet['placements'].append((shelf_x, shelf_y, el['w'], el['h'], el['nazwa'])); shelf_x += w
-            else: sheets.append(current_sheet); current_sheet = {'w': arkusz_w, 'h': arkusz_h, 'placements': []}; shelf_x, shelf_y, shelf_h = 0, 0, h; current_sheet['placements'].append((shelf_x, shelf_y, el['w'], el['h'], el['nazwa'])); shelf_x += w
-    sheets.append(current_sheet); return sheets
-
-def rysuj_arkusz(sheet_data, idx):
-    # Dzielimy wykres: Góra (80%) to rysunek, Dół (20%) to legenda
-    fig = plt.figure(figsize=(10, 10))
-    gs = fig.add_gridspec(2, 1, height_ratios=[4, 1])
-    ax = fig.add_subplot(gs[0])
-    ax_leg = fig.add_subplot(gs[1]); ax_leg.axis('off')
-
-    ax.set_title(f"Arkusz {idx+1} (2800x2070 mm)", fontsize=14)
-    ax.add_patch(patches.Rectangle((0, 0), 2800, 2070, facecolor='#eee', edgecolor='black'))
-    
-    legend_data = []
-    
-    for i, p in enumerate(sheet_data['placements']):
-        x, y, w, h, name = p
-        
-        # Rysujemy formatkę
-        ax.add_patch(patches.Rectangle((x, y), w, h, facecolor='#d7ba9d', edgecolor='black', alpha=0.9))
-        
-        # Etykieta to tylko numer ID (np. #1)
-        short_id = f"#{i+1}"
-        
-        # Logika obracania tekstu jeśli formatka jest wąska
-        rot = 90 if h > w else 0
-        fontsize = 8 if min(w, h) > 100 else 5
-        
-        ax.text(x + w/2, y + h/2, short_id, ha='center', va='center', fontsize=fontsize, rotation=rot, weight='bold')
-        
-        # Dodajemy do legendy
-        legend_data.append([short_id, f"{w}x{h}", name])
-
-    ax.set_xlim(0, 2800); ax.set_ylim(0, 2070); ax.set_aspect('equal'); ax.axis('off')
-
-    # Rysujemy tabelę legendy pod spodem
-    if legend_data:
-        col_labels = ["ID", "Wymiar", "Nazwa"]
-        col_widths = [0.1, 0.2, 0.7]
-        table = ax_leg.table(cellText=legend_data, colLabels=col_labels, loc='center', cellLoc='left', colWidths=col_widths)
-        table.auto_set_font_size(False); table.set_fontsize(9); table.scale(1, 1.2)
-
+def rysuj_nesting(els):
+    els = sorted(els, key=lambda x: x['h'], reverse=True)
+    fig = plt.figure(figsize=(10, 10)); ax = fig.add_subplot(111)
+    ax.add_patch(patches.Rectangle((0,0), 2800, 2070, facecolor='#eee', edgecolor='black'))
+    cx, cy, ch = 0, 0, 0
+    for i, e in enumerate(els):
+        w, h = e['w']+4, e['h']+4
+        if cx+w > 2800: cx=0; cy+=ch; ch=0
+        if cy+h > 2070: break
+        ax.add_patch(patches.Rectangle((cx, cy), w-4, h-4, facecolor='#d7ba9d', alpha=0.8, edgecolor='black'))
+        fs = 8 if min(w,h)>100 else 6; rot = 90 if h>w else 0
+        ax.text(cx+w/2, cy+h/2, f"#{i+1}\n{e['w']}x{e['h']}", ha='center', va='center', fontsize=fs, rotation=rot)
+        cx+=w; ch=max(ch, h)
+    ax.set_xlim(0, 2800); ax.set_ylim(0, 2070); ax.set_aspect('equal'); ax.axis('off'); ax.set_title("Rozkrój (Poglądowy)", size=14)
     return fig
 
-def generuj_szablon_a4(element, rog):
-    plt.close('all'); fig, ax = plt.subplots(figsize=(8.27, 11.69)); szer, wys = element['Szerokość [mm]'], element['Wysokość [mm]']; otwory = element['wiercenia']; plt.title(f"SZABLON: {element['ID']} ({rog})", fontsize=14, pad=10)
-    ax.add_patch(patches.Rectangle((0, 0), szer, wys, linewidth=3, edgecolor='black', facecolor='#eee', zorder=1))
-    for otw in otwory: x, y = otw[0], otw[1]; kolor = otw[2] if len(otw) > 2 else 'black'; ax.plot([x-10, x+10], [y, y], color=kolor, linewidth=1.5, zorder=10); ax.plot([x, x], [y-10, y+10], color=kolor, linewidth=1.5, zorder=10); ax.text(x+5, y+5, f"({x:.0f}, {y:.0f})", fontsize=9, color=kolor, zorder=20, weight='bold')
-    a4_w, a4_h, m = 210, 297, 10
-    if "LD" in rog: ax.set_xlim(-m, a4_w-m); ax.set_ylim(-m, a4_h-m)
-    elif "LG" in rog: ax.set_xlim(-m, a4_w-m); ax.set_ylim(wys-a4_h+m, wys+m)
-    elif "PD" in rog: ax.set_xlim(szer-a4_w+m, szer+m); ax.set_ylim(-m, a4_h-m)
-    elif "PG" in rog: ax.set_xlim(szer-a4_w+m, szer+m); ax.set_ylim(wys-a4_h+m, wys+m)
-    ax.set_aspect('equal'); ax.grid(True, linestyle=':', alpha=0.5); return fig
-
-def rysuj_podglad_mebla(w, h, gr, n_przeg, moduly_sekcji, szer_wneki, typ_konstr):
-    plt.close('all'); fig, ax = plt.subplots(figsize=(12, 8)); plt.title(f"WIZUALIZACJA: {st.session_state['kod_pro']}\n{typ_konstr}", fontsize=18, weight='bold', pad=20)
-    if "Wpuszczane" in typ_konstr: ax.add_patch(patches.Rectangle((0, 0), gr, h, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((w-gr, 0), gr, h, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((gr, h-gr), w-2*gr, gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((gr, 0), w-2*gr, gr, facecolor='#d7ba9d', edgecolor='black'))
-    else: ax.add_patch(patches.Rectangle((0, 0), w, gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((0, h-gr), w, gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((0, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black')); ax.add_patch(patches.Rectangle((w-gr, gr), gr, h-2*gr, facecolor='#d7ba9d', edgecolor='black'))
-    curr_x = gr; h_wew = h - 2*gr
-    for i in range(n_przeg + 1):
-        if i < n_przeg: ax.add_patch(patches.Rectangle((curr_x + szer_wneki, gr), gr, h_wew, facecolor='gray', alpha=0.3))
-        moduly = moduly_sekcji.get(i, [])
-        if moduly:
-            fixed_sum = sum(m['wys_mm'] for m in moduly if m['wys_mode'] == 'fixed'); auto_cnt = sum(1 for m in moduly if m['wys_mode'] == 'auto'); h_auto = (h_wew - fixed_sum) / max(1, auto_cnt); curr_y = gr
-            for idx, mod in enumerate(moduly):
-                if idx > 0: ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, gr, facecolor='#d7ba9d', edgecolor='black')); curr_y += gr
-                h_mod = mod['wys_mm'] if mod['wys_mode'] == 'fixed' else h_auto; det = mod['detale']
-                if mod['typ'] == "Półki":
-                    n = det.get('ilosc', 1); gap = h_mod / (n + 1)
-                    for k in range(n): yp = curr_y + (k+1)*gap; ax.add_patch(patches.Rectangle((curr_x, yp), szer_wneki, gr, color='#8B4513' if not det.get('fixed') else '#d7ba9d'))
-                ax.add_patch(patches.Rectangle((curr_x, curr_y), szer_wneki, h_mod, facecolor='none', edgecolor='black', linestyle=':', alpha=0.3)); curr_y += h_mod
-        curr_x += szer_wneki + gr
-    ax.set_xlim(-100, w + 100); ax.set_ylim(-100, h + 100); ax.set_aspect('equal'); ax.axis('off'); return fig
+def rysuj_podglad_mebla(w, h, gr, n_p, ms, sw, tk):
+    plt.close('all'); fig, ax = plt.subplots(figsize=(12, 8)); ax.axis('off'); ax.set_aspect('equal')
+    ax.set_xlim(-100, w+100); ax.set_ylim(-100, h+100); ax.set_title("WIZUALIZACJA", size=18, weight='bold')
+    if "Wpuszczane" in tk: r=[(0,0,gr,h), (w-gr,0,gr,h), (gr,h-gr,w-2*gr,gr), (gr,0,w-2*gr,gr)]
+    else: r=[(0,0,w,gr), (0,h-gr,w,gr), (0,gr,gr,h-2*gr), (w-gr,gr,gr,h-2*gr)]
+    for rx,ry,rw,rh in r: ax.add_patch(patches.Rectangle((rx,ry), rw, rh, facecolor='#d7ba9d', edgecolor='black'))
+    cx = gr
+    for i in range(n_p+1):
+        if i < n_p: ax.add_patch(patches.Rectangle((cx+sw, gr), gr, h-2*gr, facecolor='gray', alpha=0.5))
+        cy = gr; m_list = ms.get(i, [])
+        ha = (h-2*gr - sum(m['wys_mm'] for m in m_list if m['wys_mode']=='fixed')) / max(1, sum(1 for m in m_list if m['wys_mode']=='auto'))
+        for idx, m in enumerate(m_list):
+            if idx>0: ax.add_patch(patches.Rectangle((cx, cy), sw, gr, facecolor='#d7ba9d', edgecolor='black')); cy+=gr
+            hm = m['wys_mm'] if m['wys_mode']=='fixed' else ha
+            if m['typ'] == "Półki":
+                g = hm/(m['detale'].get('ilosc')+1)
+                for k in range(m['detale'].get('ilosc')): ax.add_patch(patches.Rectangle((cx, cy+(k+1)*g), sw, gr, color='#8B4513'))
+            ax.add_patch(patches.Rectangle((cx, cy), sw, hm, fill=False, edgecolor='black', ls=':', alpha=0.3)); cy+=hm
+        cx += sw + gr
+    return fig
 
 # ==========================================
-# 7. WIDOK
+# 6. UI
 # ==========================================
-instrukcja_tekst = generuj_instrukcje_tekst()
-
-tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🧊 3D", "🛠️ INSTRUKCJA", "💰 KOSZTORYS", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
+tabs = st.tabs(["📋 LISTA", "📐 RYSUNKI", "🛠️ INSTRUKCJA", "💰 KOSZTORYS", "🗺️ ROZKRÓJ", "👁️ WIZUALIZACJA"])
 
 with tabs[0]: 
     df_disp = df.drop(columns=['wiercenia', 'orientacja'])
-    csv = df_disp.to_csv(index=False).encode('utf-8-sig')
-    st.download_button("💾 Pobierz CSV", csv, f"{KOD_PROJEKTU}.csv", "text/csv")
+    st.download_button("💾 CSV", df_disp.to_csv(index=False).encode('utf-8-sig'), f"{KOD_PROJEKTU}.csv", "text/csv")
     st.dataframe(df_disp, use_container_width=True)
 
 with tabs[1]:
-    if st.button("📄 PDF"):
+    if st.button("📄 GENERUJ PDF"):
         buf = io.BytesIO()
         with PdfPages(buf) as pdf:
             for el in lista_elementow:
                 plt.clf()
                 fs = (11.69, 8.27) if el['Szerokość [mm]'] > el['Wysokość [mm]'] else (8.27, 11.69)
-                orient = 'landscape' if el['Szerokość [mm]'] > el['Wysokość [mm]'] else 'portrait'
-                fig = rysuj_element(el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], el['wiercenia'], el['orientacja'], figsize=fs)
-                pdf.savefig(fig, orientation=orient); plt.close(fig)
-                if el['wiercenia']:
-                    fig_tab = rysuj_tabele_strona(el['ID'], el['Nazwa'], el['wiercenia'])
-                    pdf.savefig(fig_tab, orientation='portrait'); plt.close(fig_tab)
-            fig_instr = rysuj_instrukcje_pdf(instrukcja_tekst)
-            pdf.savefig(fig_instr, orientation='portrait'); plt.close(fig_instr)
+                o = 'landscape' if el['Szerokość [mm]'] > el['Wysokość [mm]'] else 'portrait'
+                pdf.savefig(rysuj_element(el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], el['wiercenia'], el['orientacja'], figsize=fs), orientation=o)
+                if el['wiercenia']: pdf.savefig(rysuj_tabele_strona(el['ID'], el['Nazwa'], el['wiercenia']), orientation='portrait')
+            pdf.savefig(rysuj_instrukcje_pdf(generuj_instrukcje_tekst()), orientation='portrait')
         st.session_state['pdf_ready'] = buf
-    if st.session_state['pdf_ready']: st.download_button("Pobierz", st.session_state['pdf_ready'].getvalue(), "projekt.pdf", "application/pdf")
-    sel = st.selectbox("Element", [e['ID'] for e in lista_elementow])
-    it = next(x for x in lista_elementow if x['ID'] == sel)
-    st.pyplot(rysuj_element(it['Szerokość [mm]'], it['Wysokość [mm]'], it['ID'], it['Nazwa'], it['wiercenia'], it['orientacja']))
+    if st.session_state['pdf_ready']: st.download_button("POBIERZ PDF", st.session_state['pdf_ready'].getvalue(), "projekt.pdf", "application/pdf")
+    
+    s = st.selectbox("Podgląd", [e['ID'] for e in lista_elementow])
+    el = next(x for x in lista_elementow if x['ID']==s)
+    st.pyplot(rysuj_element(el['Szerokość [mm]'], el['Wysokość [mm]'], el['ID'], el['Nazwa'], el['wiercenia'], el['orientacja']))
 
-with tabs[2]:
-    if GRAFIKA_DOSTEPNA:
-        st.plotly_chart(generuj_widok_3d(), use_container_width=True)
-    else:
-        st.warning("Widok 3D wymaga biblioteki plotly.")
-
-with tabs[3]: st.markdown("### Instrukcja Montażu"); st.text(instrukcja_tekst)
+with tabs[2]: st.text(generuj_instrukcje_tekst())
+with tabs[3]:
+    st.write(f"RAZEM (Płyta): {sum(x['Szerokość [mm]']*x['Wysokość [mm]'] for x in lista_elementow if 'KORPUS' in x['Materiał'])/1000000:.2f} m2")
 with tabs[4]:
-    st.markdown("### Szacunkowy Kosztorys")
-    df_koszt = df.copy()
-    df_koszt['Powierzchnia [m2]'] = (df_koszt['Szerokość [mm]'] * df_koszt['Wysokość [mm]']) / 1000000 
-    grupy = df_koszt.groupby('Materiał')['Powierzchnia [m2]'].sum().reset_index()
-    koszt_calkowity = 0
-    st.write("#### Materiały Płytowe")
-    for index, row in grupy.iterrows():
-        mat = row['Materiał']; area = row['Powierzchnia [m2]']; cena_jedn = 0
-        if "KORPUS" in mat: cena_jedn = st.session_state['cena_korpus']
-        elif "FRONT" in mat: cena_jedn = st.session_state['cena_front']
-        elif "HDF" in mat: cena_jedn = st.session_state['cena_hdf']
-        koszt = area * cena_jedn; koszt_calkowity += koszt
-        st.write(f"- **{mat}**: {area:.2f} m² x {cena_jedn} zł = {koszt:.2f} zł")
-    st.write("#### Obrzeża (Szacunek)")
-    df_koszt['Obwód [m]'] = (2*df_koszt['Szerokość [mm]'] + 2*df_koszt['Wysokość [mm]']) / 1000
-    mb_total = df_koszt['Obwód [m]'].sum()
-    koszt_okl = mb_total * st.session_state['cena_okl']
-    st.write(f"- Oklejanie: {mb_total:.1f} mb x {st.session_state['cena_okl']} zł = {koszt_okl:.2f} zł")
-    koszt_calkowity += koszt_okl
-    st.metric("RAZEM (Netto materiał)", f"{koszt_calkowity:.2f} PLN")
-
-with tabs[5]:
-    st.markdown("### Wizualizacja Rozkroju (Płyta 2800x2070)")
-    el_korpus = [{"w": x['Szerokość [mm]'], "h": x['Wysokość [mm]'], "nazwa": x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]
-    if el_korpus:
-        arkusze = rysuj_nesting(el_korpus)
-        st.info(f"Potrzebujesz {len(arkusze)} płyt(y) na korpus.")
-        for i, ark in enumerate(arkusze): st.pyplot(rysuj_arkusz(ark, i))
-    else: st.warning("Brak elementów korpusu do rozkroju.")
-
-with tabs[6]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ILOSC_PRZEGROD, st.session_state['moduly_sekcji'], SZER_JEDNEJ_WNEKI, TYP_KONSTRUKCJI))
+    ek = [{"w":x['Szerokość [mm]', "h"]:x['Wysokość [mm]'], "nazwa":x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]
+    if ek: st.pyplot(rysuj_nesting([{"w":x['Szerokość [mm]'], "h":x['Wysokość [mm]'], "nazwa":x['ID']} for x in lista_elementow if "KORPUS" in x['Materiał']]))
+with tabs[5]: st.pyplot(rysuj_podglad_mebla(W_MEBLA, H_MEBLA, GR_PLYTY, ILOSC_PRZEGROD, st.session_state['moduly_sekcji'], SZER_JEDNEJ_WNEKI, TYP_KONSTRUKCJI))
